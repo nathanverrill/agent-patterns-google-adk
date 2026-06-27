@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReadyNow — FEMA Emergency Response Command</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #060a14;
+        --bg-2: #080e1c;
+        --panel: #0c1727;
+        --panel-2: #101e34;
+        --edge: #1b2d4c;
+        --edge-soft: rgba(120, 150, 205, 0.14);
+        --blue: #2e6fd8;
+        --blue-deep: #1b4da0;
+        --amber: #f5a524;
+        --amber-bright: #ffc862;
+        --cyan: #3ad6df;
+        --red: #ff5860;
+        --text: #e9effa;
+        --text-dim: #8497b8;
+        --text-faint: #56688c;
+        --f-display: "Chakra Petch", sans-serif;
+        --f-body: "Inter", sans-serif;
+        --f-mono: "JetBrains Mono", monospace;
+        --radius: 6px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--f-body);
+        color: var(--text);
+        background-color: var(--bg);
+        background-image:
+          radial-gradient(
+            900px 500px at 78% -10%,
+            rgba(46, 111, 216, 0.16),
+            transparent 60%
+          ),
+          radial-gradient(
+            700px 480px at 0% 110%,
+            rgba(245, 165, 36, 0.07),
+            transparent 55%
+          ),
+          linear-gradient(transparent 95%, var(--edge-soft) 95%),
+          linear-gradient(90deg, transparent 95%, var(--edge-soft) 95%);
+        background-size:
+          auto,
+          auto,
+          34px 34px,
+          34px 34px;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        padding: 16px;
+        gap: 12px;
+        overflow: hidden;
+      }
+
+      /* ---------- Command bar ---------- */
+      .command-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        background: linear-gradient(180deg, var(--panel-2), var(--panel));
+        border: 1px solid var(--edge);
+        border-top: 2px solid var(--amber);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        position: relative;
+        overflow: hidden;
+      }
+      .command-bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(
+          90deg,
+          transparent 0 6px,
+          rgba(255, 255, 255, 0.012) 6px 7px
+        );
+        pointer-events: none;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+      .emblem {
+        width: 52px;
+        height: 52px;
+        flex: none;
+      }
+      .sweep {
+        transform-origin: 32px 32px;
+        animation: sweep 4.2s linear infinite;
+      }
+      @keyframes sweep {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .brand-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .eyebrow {
+        font-family: var(--f-mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.28em;
+        color: var(--amber);
+        text-transform: uppercase;
+        font-weight: 500;
+      }
+      .wordmark {
+        font-family: var(--f-display);
+        font-weight: 700;
+        font-size: 1.55rem;
+        letter-spacing: 0.04em;
+        line-height: 1.05;
+        margin: 1px 0;
+        white-space: nowrap;
+      }
+      .wordmark b {
+        color: var(--amber);
+        font-weight: 700;
+      }
+      .tagline {
+        font-size: 0.74rem;
+        color: var(--text-dim);
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .status-cluster {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        flex: none;
+      }
+      .readiness {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 3px;
+      }
+      .readiness .k {
+        font-family: var(--f-mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.22em;
+        color: var(--text-faint);
+        text-transform: uppercase;
+      }
+      .readiness .v {
+        font-family: var(--f-display);
+        font-weight: 600;
+        font-size: 0.96rem;
+        letter-spacing: 0.06em;
+        color: var(--cyan);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .beacon {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 0 0 rgba(58, 214, 223, 0.6);
+        animation: pulse 2.4s ease-out infinite;
+      }
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(58, 214, 223, 0.5);
+        }
+        70% {
+          box-shadow: 0 0 0 9px rgba(58, 214, 223, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(58, 214, 223, 0);
+        }
+      }
+      .clock {
+        font-family: var(--f-mono);
+        text-align: right;
+      }
+      .clock .t {
+        font-size: 1.18rem;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--text);
+      }
+      .clock .d {
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        color: var(--text-faint);
+        text-transform: uppercase;
+      }
+
+      /* ---------- Telemetry strip ---------- */
+      .telemetry {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: var(--radius);
+        overflow: hidden;
+        flex: none;
+      }
+      .tcell {
+        padding: 9px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border-right: 1px solid var(--edge);
+        flex: 1;
+        min-width: 0;
+      }
+      .tcell:last-child {
+        border-right: none;
+      }
+      .tcell .k {
+        font-family: var(--f-mono);
+        font-size: 0.56rem;
+        letter-spacing: 0.2em;
+        color: var(--text-faint);
+        text-transform: uppercase;
+      }
+      .tcell .v {
+        font-family: var(--f-mono);
+        font-size: 0.84rem;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tcell .v.live {
+        color: var(--cyan);
+      }
+      .tcell .v.warn {
+        color: var(--red);
+      }
+
+      /* ---------- Console grid ---------- */
+      .console {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 248px 1fr;
+        gap: 12px;
+        min-height: 0;
+      }
+
+      .rail {
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: var(--radius);
+        padding: 16px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+      }
+      .rail-head {
+        font-family: var(--f-mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.24em;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .rail-head::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--edge);
+      }
+      .agent {
+        display: flex;
+        gap: 11px;
+        align-items: center;
+        padding: 10px 11px;
+        border: 1px solid var(--edge);
+        border-radius: var(--radius);
+        background: var(--bg-2);
+        transition:
+          border-color 0.25s,
+          background 0.25s;
+      }
+      .agent .num {
+        font-family: var(--f-mono);
+        font-size: 0.72rem;
+        color: var(--text-faint);
+        font-weight: 700;
+      }
+      .agent .body {
+        flex: 1;
+        min-width: 0;
+      }
+      .agent .name {
+        font-family: var(--f-display);
+        font-weight: 600;
+        font-size: 0.86rem;
+        letter-spacing: 0.04em;
+      }
+      .agent .role {
+        font-family: var(--f-mono);
+        font-size: 0.62rem;
+        color: var(--text-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--text-faint);
+        flex: none;
+        transition: background 0.2s;
+      }
+      .agent.active {
+        border-color: var(--amber);
+        background: rgba(245, 165, 36, 0.08);
+      }
+      .agent.active .dot {
+        background: var(--amber);
+        animation: blink 0.9s ease-in-out infinite;
+      }
+      .agent.active .name {
+        color: var(--amber-bright);
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .rail-foot {
+        margin-top: auto;
+        font-family: var(--f-mono);
+        font-size: 0.62rem;
+        color: var(--text-faint);
+        line-height: 1.7;
+        border-top: 1px solid var(--edge);
+        padding-top: 12px;
+      }
+      .rail-foot b {
+        color: var(--blue);
+        font-weight: 500;
+      }
+
+      /* ---------- Log ---------- */
+      .log-wrap {
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: var(--radius);
+        position: relative;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .log-label {
+        position: absolute;
+        top: 10px;
+        right: 14px;
+        font-family: var(--f-mono);
+        font-size: 0.56rem;
+        letter-spacing: 0.22em;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        pointer-events: none;
+      }
+      #chat-window {
+        flex: 1;
+        overflow-y: auto;
+        padding: 26px 22px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .msg {
+        max-width: 82%;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .msg .meta {
+        font-family: var(--f-mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+      }
+      .msg .bubble {
+        padding: 12px 15px;
+        border-radius: var(--radius);
+        line-height: 1.55;
+        font-size: 0.93rem;
+        white-space: pre-line;
+      }
+      .msg.user {
+        align-self: flex-end;
+        align-items: flex-end;
+      }
+      .msg.user .bubble {
+        background: linear-gradient(180deg, var(--blue), var(--blue-deep));
+        color: #fff;
+        border: 1px solid #3f80ea;
+        border-bottom-right-radius: 1px;
+      }
+      .msg.user .meta {
+        color: #7fa9ec;
+      }
+      .msg.agent {
+        align-self: flex-start;
+      }
+      .msg.agent .bubble {
+        background: var(--panel-2);
+        border: 1px solid var(--edge);
+        border-left: 3px solid var(--amber);
+        border-bottom-left-radius: 1px;
+        color: var(--text);
+      }
+      .msg.agent .meta {
+        color: var(--amber);
+      }
+      .msg.system .bubble {
+        background: rgba(255, 88, 96, 0.08);
+        border: 1px solid rgba(255, 88, 96, 0.4);
+        border-left: 3px solid var(--red);
+        color: #ffd9db;
+      }
+      .msg.system .meta {
+        color: var(--red);
+      }
+
+      /* pipeline loader */
+      .pipeline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--f-mono);
+        font-size: 0.72rem;
+      }
+      .pstage {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-faint);
+        letter-spacing: 0.06em;
+      }
+      .pstage .pd {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-faint);
+      }
+      .pstage.on {
+        color: var(--amber-bright);
+      }
+      .pstage.on .pd {
+        background: var(--amber);
+        animation: blink 0.9s ease-in-out infinite;
+      }
+      .psep {
+        color: var(--edge);
+      }
+      .psep.on {
+        color: var(--amber);
+      }
+
+      /* ---------- Dispatch ---------- */
+      .dispatch {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        font-family: var(--f-mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.04em;
+        color: var(--text-dim);
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 20px;
+        padding: 6px 13px;
+        cursor: pointer;
+        transition:
+          color 0.2s,
+          border-color 0.2s,
+          background 0.2s;
+      }
+      .chip:hover {
+        color: var(--amber-bright);
+        border-color: var(--amber);
+        background: rgba(245, 165, 36, 0.07);
+      }
+      .input-row {
+        display: flex;
+        gap: 10px;
+        align-items: stretch;
+      }
+      .input-shell {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: var(--radius);
+        padding: 0 14px;
+        transition: border-color 0.2s;
+      }
+      .input-shell:focus-within {
+        border-color: var(--blue);
+      }
+      .input-shell .prompt {
+        font-family: var(--f-mono);
+        color: var(--amber);
+        font-size: 0.92rem;
+        flex: none;
+      }
+      #user-input {
+        flex: 1;
+        background: none;
+        border: none;
+        color: var(--text);
+        font-size: 0.95rem;
+        font-family: var(--f-body);
+        padding: 15px 0;
+      }
+      #user-input::placeholder {
+        color: var(--text-faint);
+      }
+      #user-input:focus {
+        outline: none;
+      }
+      button.dispatch-btn {
+        font-family: var(--f-display);
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        font-size: 0.88rem;
+        color: #1a1206;
+        background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+        border: 1px solid var(--amber);
+        border-radius: var(--radius);
+        padding: 0 26px;
+        cursor: pointer;
+        transition:
+          filter 0.2s,
+          opacity 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      button.dispatch-btn:hover {
+        filter: brightness(1.08);
+      }
+      button.dispatch-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        filter: grayscale(0.4);
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 2px;
+      }
+
+      /* scrollbars */
+      #chat-window::-webkit-scrollbar,
+      .rail::-webkit-scrollbar {
+        width: 8px;
+      }
+      #chat-window::-webkit-scrollbar-thumb,
+      .rail::-webkit-scrollbar-thumb {
+        background: var(--edge);
+        border-radius: 4px;
+      }
+
+      @media (max-width: 880px) {
+        .console {
+          grid-template-columns: 1fr;
+        }
+        .rail {
+          flex-direction: row;
+          align-items: stretch;
+          overflow-x: auto;
+          overflow-y: hidden;
+          gap: 10px;
+        }
+        .rail-head,
+        .rail-foot {
+          display: none;
+        }
+        .agent {
+          min-width: 180px;
+        }
+        .tagline {
+          display: none;
+        }
+        .status-cluster {
+          gap: 14px;
+        }
+        .readiness {
+          display: none;
+        }
+      }
+      @media (max-width: 560px) {
+        body {
+          padding: 10px;
+        }
+        .telemetry {
+          display: none;
+        }
+        .wordmark {
+          font-size: 1.25rem;
+        }
+        .msg {
+          max-width: 92%;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sweep,
+        .beacon,
+        .agent.active .dot,
+        .pstage.on .pd {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="command-bar">
+      <div class="brand">
+        <svg class="emblem" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="29" fill="none" stroke="#1b2d4c" stroke-width="2" />
+          <circle cx="32" cy="32" r="20" fill="none" stroke="#1b2d4c" stroke-width="1" />
+          <circle cx="32" cy="32" r="11" fill="none" stroke="#1b2d4c" stroke-width="1" />
+          <line x1="32" y1="3" x2="32" y2="9" stroke="#2e6fd8" stroke-width="2" />
+          <line x1="32" y1="55" x2="32" y2="61" stroke="#2e6fd8" stroke-width="2" />
+          <line x1="3" y1="32" x2="9" y2="32" stroke="#2e6fd8" stroke-width="2" />
+          <line x1="55" y1="32" x2="61" y2="32" stroke="#2e6fd8" stroke-width="2" />
+          <g class="sweep">
+            <path d="M32 32 L32 5 A27 27 0 0 1 52 16 Z" fill="rgba(245,165,36,0.22)" />
+            <line x1="32" y1="32" x2="32" y2="5" stroke="#f5a524" stroke-width="2" />
+          </g>
+          <path d="M24 38 L32 24 L40 38" fill="none" stroke="#3ad6df" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+          <circle cx="32" cy="32" r="2.4" fill="#f5a524" />
+        </svg>
+        <div class="brand-text">
+          <span class="eyebrow">FEMA · Emergency Response Command</span>
+          <span class="wordmark">Ready<b>Now</b></span>
+          <span class="tagline">Regional hazard &amp; evacuation operations console</span>
+        </div>
+      </div>
+      <div class="status-cluster">
+        <div class="readiness">
+          <span class="k">Readiness</span>
+          <span class="v"><span class="beacon"></span>Operational</span>
+        </div>
+        <div class="clock">
+          <div class="t" id="clock-time">--:--:--</div>
+          <div class="d" id="clock-date">— UTC</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="telemetry">
+      <div class="tcell">
+        <span class="k">Uplink</span>
+        <span class="v" id="t-uplink">localhost:8008</span>
+      </div>
+      <div class="tcell">
+        <span class="k">Session</span>
+        <span class="v" id="t-session">—</span>
+      </div>
+      <div class="tcell">
+        <span class="k">Link</span>
+        <span class="v live" id="t-link">Standby</span>
+      </div>
+      <div class="tcell">
+        <span class="k">Latency</span>
+        <span class="v" id="t-latency">— ms</span>
+      </div>
+      <div class="tcell">
+        <span class="k">Response cluster</span>
+        <span class="v live" id="t-agents">3 / 3 online</span>
+      </div>
+    </div>
+
+    <main class="console">
+      <aside class="rail">
+        <div class="rail-head">Response cluster</div>
+        <div class="agent" id="stage-analyst">
+          <span class="num">01</span>
+          <div class="body">
+            <div class="name">Analyst</div>
+            <div class="role">hazard &amp; weather telemetry</div>
+          </div>
+          <span class="dot"></span>
+        </div>
+        <div class="agent" id="stage-safety">
+          <span class="num">02</span>
+          <div class="body">
+            <div class="name">Safety</div>
+            <div class="role">risk &amp; accuracy review</div>
+          </div>
+          <span class="dot"></span>
+        </div>
+        <div class="agent" id="stage-editor">
+          <span class="num">03</span>
+          <div class="body">
+            <div class="name">Editor</div>
+            <div class="role">final dispatch copy</div>
+          </div>
+          <span class="dot"></span>
+        </div>
+        <div class="rail-foot">
+          ROUTING · <b>sequential</b><br />
+          MODEL · gemini-2.5-flash<br />
+          CMD · ReadyNow_Command_Root
+        </div>
+      </aside>
+
+      <section class="log-wrap">
+        <span class="log-label">Transmission log</span>
+        <div id="chat-window">
+          <div class="msg agent">
+            <span class="meta">ReadyNow · system</span>
+            <div class="bubble">ReadyNow command is online. Report your situation or location and I'll pull current hazard conditions, weather telemetry, and evacuation routing.
+
+If anyone is in immediate danger, call 911 first — then come back here for guidance.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="dispatch">
+      <div class="chips" id="chips">
+        <span class="chip" onclick="useChip(this)">Tornado warning near Joplin, MO</span>
+        <span class="chip" onclick="useChip(this)">Weather in Kirkwood, MO</span>
+        <span class="chip" onclick="useChip(this)">Evacuation routes from 1316 Missouri Ave</span>
+      </div>
+      <div class="input-row">
+        <div class="input-shell">
+          <span class="prompt">&gt;</span>
+          <input
+            type="text"
+            id="user-input"
+            autocomplete="off"
+            placeholder="Report a situation or location — e.g. tornado warning near Joplin, MO"
+            onkeypress="if (event.key === 'Enter') sendMessage();"
+          />
+        </div>
+        <button class="dispatch-btn" id="send-btn" onclick="sendMessage()">
+          Dispatch
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const sessionId = "session-" + Math.random().toString(36).substr(2, 9);
+      const chatWindow = document.getElementById("chat-window");
+      const linkEl = document.getElementById("t-link");
+      const latencyEl = document.getElementById("t-latency");
+      const sendBtn = document.getElementById("send-btn");
+      const inputEl = document.getElementById("user-input");
+
+      document.getElementById("t-session").textContent = sessionId;
+
+      // ---- live UTC clock ----
+      function tickClock() {
+        const now = new Date();
+        const iso = now.toISOString();
+        document.getElementById("clock-time").textContent = iso.slice(11, 19);
+        const date = now
+          .toUTCString()
+          .replace(/^[A-Za-z]+, /, "")
+          .replace(/ GMT$/, " UTC");
+        document.getElementById("clock-date").textContent = date.slice(0, 11) + " UTC";
+      }
+      tickClock();
+      setInterval(tickClock, 1000);
+
+      function nowTag() {
+        return new Date().toISOString().slice(11, 19) + " UTC";
+      }
+
+      // ---- agent pipeline indicator ----
+      const stages = ["analyst", "safety", "editor"];
+      let pipelineTimer = null;
+      let activeStage = 0;
+      let loaderEl = null;
+
+      function renderPipeline() {
+        return stages
+          .map((s, i) => {
+            const on = i === activeStage ? "on" : "";
+            const sep =
+              i < stages.length - 1
+                ? `<span class="psep ${i < activeStage ? "on" : ""}">›</span>`
+                : "";
+            return `<span class="pstage ${on}"><span class="pd"></span>${s.toUpperCase()}</span>${sep}`;
+          })
+          .join("");
+      }
+
+      function startPipeline() {
+        activeStage = 0;
+        loaderEl = document.createElement("div");
+        loaderEl.className = "msg agent";
+        loaderEl.innerHTML =
+          `<span class="meta">ReadyNow · processing</span>` +
+          `<div class="bubble"><div class="pipeline">${renderPipeline()}</div></div>`;
+        chatWindow.appendChild(loaderEl);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        syncRail();
+        pipelineTimer = setInterval(() => {
+          activeStage = (activeStage + 1) % stages.length;
+          loaderEl.querySelector(".pipeline").innerHTML = renderPipeline();
+          syncRail();
+        }, 850);
+      }
+
+      function syncRail() {
+        stages.forEach((s, i) => {
+          document
+            .getElementById("stage-" + s)
+            .classList.toggle("active", i === activeStage);
+        });
+      }
+
+      function stopPipeline() {
+        clearInterval(pipelineTimer);
+        pipelineTimer = null;
+        if (loaderEl) {
+          loaderEl.remove();
+          loaderEl = null;
+        }
+        stages.forEach((s) =>
+          document.getElementById("stage-" + s).classList.remove("active"),
+        );
+      }
+
+      // ---- messaging ----
+      function appendMsg(text, sender, label) {
+        const wrap = document.createElement("div");
+        wrap.className = `msg ${sender}`;
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        meta.textContent = label + " · " + nowTag();
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.innerText = text;
+        wrap.appendChild(meta);
+        wrap.appendChild(bubble);
+        chatWindow.appendChild(wrap);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        return wrap;
+      }
+
+      function setBusy(busy) {
+        sendBtn.disabled = busy;
+        inputEl.disabled = busy;
+        sendBtn.textContent = busy ? "Working" : "Dispatch";
+      }
+
+      function useChip(el) {
+        inputEl.value = el.textContent.trim();
+        inputEl.focus();
+      }
+
+      async function sendMessage() {
+        const text = inputEl.value.trim();
+        if (!text || pipelineTimer) return;
+
+        appendMsg(text, "user", "Operator");
+        inputEl.value = "";
+        setBusy(true);
+        startPipeline();
+
+        const t0 = performance.now();
+        try {
+          const response = await fetch("http://localhost:8008/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: "local-operator-nathan",
+              session_id: sessionId,
+              message: text,
+            }),
+          });
+
+          const data = await response.json();
+          const ms = Math.round(performance.now() - t0);
+          stopPipeline();
+
+          if (!response.ok) {
+            latencyEl.textContent = ms + " ms";
+            linkEl.textContent = "Engine error " + response.status;
+            linkEl.className = "v warn";
+            appendMsg(
+              "Command engine returned status " +
+                response.status +
+                ". The agents likely hit the Gemini daily quota — wait for the reset or swap the API key, then retry.",
+              "system",
+              "ReadyNow · fault",
+            );
+            return;
+          }
+
+          latencyEl.textContent = ms + " ms";
+          linkEl.textContent = "Uplink online";
+          linkEl.className = "v live";
+          appendMsg(data.response, "agent", "ReadyNow");
+        } catch (error) {
+          stopPipeline();
+          latencyEl.textContent = "— ms";
+          linkEl.textContent = "Link interrupt";
+          linkEl.className = "v warn";
+          appendMsg(
+            "Link interrupt — no response from the command engine. Confirm the backend container is running and reachable on :8008, then dispatch again.",
+            "system",
+            "ReadyNow · fault",
+          );
+        } finally {
+          setBusy(false);
+          inputEl.focus();
+        }
+      }
+    </script>
+  </body>
+</html>

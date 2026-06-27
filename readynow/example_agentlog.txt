@@ -1,0 +1,66 @@
+06:40:47 | INFO    | readynow.trace     | [e-61c926] ┌─ ENTER agent[ReadyNow_Command_Root]
+
+/usr/local/lib/python3.12/site-packages/google/adk/tools/function_tool.py:95: UserWarning: [EXPERIMENTAL] feature FeatureName.JSON_SCHEMA_FOR_FUNC_DECL is enabled.
+
+  build_function_declaration(
+
+/usr/local/lib/python3.12/site-packages/google/adk/tools/function_tool.py:95: UserWarning: [EXPERIMENTAL] feature FeatureName.JSON_SCHEMA_FOR_FUNC_DECL is enabled.
+
+  build_function_declaration(
+
+06:40:47 | INFO    | readynow.trace     | [e-61c926] │  → LLM  [ReadyNow_Command_Root] prompt: There's a tornado warning near Joplin, MO — what's the forecast and where do I evacuate?
+
+06:40:47 | INFO    | ReadyNowBackend    | 📝 [ReadyNow_Command_Root] INTERCEPTED >> There's a tornado warning near Joplin, MO — what's the forecast and where do I evacuate?
+
+06:40:47 | INFO    | readynow.trace     | [e-61c926] │  → LLM  [ReadyNow_Command_Root] prompt: There's a tornado warning near Joplin, MO — what's the forecast and where do I evacuate?
+
+06:40:47 | INFO    | ReadyNowBackend    | 📝 [ReadyNow_Command_Root] INTERCEPTED >> There's a tornado warning near Joplin, MO — what's the forecast and where do I evacuate?
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ← LLM  [ReadyNow_Command_Root] response: The user is reporting an emergency scenario: a tornado warning near Joplin, MO, and is asking for the forecast and evacuation information. According to my persona ("ReadyNow_Command_Root"), I am an authoritative, reassuring, and empathetic AI assistant for FEMA. My instructions state: "When users present emergency scenarios, pass them to your 'fema_response_pipeline' sub-agents to compile factual data, then present the resolution as a unified commanding command interface output." The available agent `fema_response_pipeline` is described as "Sequentially fetches emergency telemetry metrics, ver …[truncated]
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ← LLM  [ReadyNow_Command_Root] wants tool: transfer_to_agent({'agent_name': 'fema_response_pipeline'})
+
+06:40:54 | INFO    | ReadyNowBackend    | 🤖 [ReadyNow_Command_Root] DISPATCHED >> The user is reporting an emergency scenario: a tornado warning near Joplin, MO, and is asking for the forecast and evacuation information.
+
+According to my persona ("ReadyNow_Command_Root"), I am an authoritative, reassuring, and empathetic AI assistant for FEMA.
+
+My instructions state: "When users present emergency scenarios, pass them to your 'fema_response_pipeline' sub-agents to compile factual data, then present the resolution as a unified commanding command interface output."
+
+The available agent `fema_response_pipeline` is described as "Sequentially fetches emergency telemetry metrics, verifies communication clarity, and publishes polished updates."
+
+This matches the user's request for factual data (forecast and evacuation info) during an emergency.
+
+
+Therefore, I should transfer the request to `fema_response_pipeline`.
+
+The instructions say: "When transferring, do not generate any text other than the function call."
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ← LLM  [ReadyNow_Command_Root] response: The user is reporting an emergency scenario: a tornado warning near Joplin, MO, and is asking for the forecast and evacuation information. According to my persona ("ReadyNow_Command_Root"), I am an authoritative, reassuring, and empathetic AI assistant for FEMA. My instructions state: "When users present emergency scenarios, pass them to your 'fema_response_pipeline' sub-agents to compile factual data, then present the resolution as a unified commanding command interface output." The available agent `fema_response_pipeline` is described as "Sequentially fetches emergency telemetry metrics, ver …[truncated]
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ← LLM  [ReadyNow_Command_Root] wants tool: transfer_to_agent({'agent_name': 'fema_response_pipeline'})
+
+06:40:54 | INFO    | ReadyNowBackend    | 🤖 [ReadyNow_Command_Root] DISPATCHED >> The user is reporting an emergency scenario: a tornado warning near Joplin, MO, and is asking for the forecast and evacuation information.
+
+According to my persona ("ReadyNow_Command_Root"), I am an authoritative, reassuring, and empathetic AI assistant for FEMA.
+
+My instructions state: "When users present emergency scenarios, pass them to your 'fema_response_pipeline' sub-agents to compile factual data, then present the resolution as a unified commanding command interface output."
+
+The available agent `fema_response_pipeline` is described as "Sequentially fetches emergency telemetry metrics, verifies communication clarity, and publishes polished updates."
+
+This matches the user's request for factual data (forecast and evacuation info) during an emergency.
+
+
+Therefore, I should transfer the request to `fema_response_pipeline`.
+
+The instructions say: "When transferring, do not generate any text other than the function call."
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ⚙ TOOL  [ReadyNow_Command_Root] call transfer_to_agent args={'agent_name': 'fema_response_pipeline'}
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ⚙ TOOL  [ReadyNow_Command_Root] transfer_to_agent → None
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ⚙ TOOL  [ReadyNow_Command_Root] call transfer_to_agent args={'agent_name': 'fema_response_pipeline'}
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] │  ⚙ TOOL  [ReadyNow_Command_Root] transfer_to_agent → None
+
+06:40:54 | INFO    | readynow.trace     | [e-61c926] ┌─ ENTER agent[fema_response_pipeline]
+

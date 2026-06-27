@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  # 1. FastAPI API Gateway & Multi-Agent Framework Core
+  backend-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: readynow_backend_engine
+    ports:
+      - "8008:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # - AGENT_MODEL_NAME=gemini/gemini-2.5-flash-lite
+      - AGENT_MODEL_NAME=gemini/gemma-4-26b-a4b-it
+      - ADK_SUPPRESS_GEMINI_LITELLM_WARNINGS=true
+      - ADK_ENABLE_TRACING=false # limit noise in logs running lcoally with no otel
+      - LITELLM_NUM_RETRIES=3
+
+  # 2. Lightweight Web Server serving the Frontend Dashboard
+  frontend-ui:
+    image: nginx:alpine
+    container_name: readynow_frontend_ui
+    ports:
+      - "9009:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - backend-engine
