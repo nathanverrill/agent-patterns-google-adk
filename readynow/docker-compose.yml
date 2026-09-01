@@ -14,12 +14,13 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - LLM_MODEL=${LLM_MODEL:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - AGENT_MODEL_NAME=${AGENT_MODEL_NAME:-}      # legacy alias for LLM_MODEL
       # --- Optional extras ------------------------------------------------
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}          # premium geocoding; else Nominatim
       - READYNOW_CONTACT=${READYNOW_CONTACT:-}      # User-Agent identity for NWS/Nominatim
+      - LLM_WARMUP=${LLM_WARMUP:-true}              # 1-token call at boot; keeps the first query fast
       - LITELLM_NUM_RETRIES=${LITELLM_NUM_RETRIES:-3}
-      # Use LiteLLM's bundled pricing table instead of fetching it on the first
-      # call — that fetch is what made the very first request feel like a hang.
+      # Use LiteLLM's bundled pricing table rather than fetching it at runtime.
       - LITELLM_LOCAL_MODEL_COST_MAP=True
       - ADK_SUPPRESS_GEMINI_LITELLM_WARNINGS=true
       - ADK_ENABLE_TRACING=false # limit noise in logs running locally with no otel

@@ -43,7 +43,10 @@ The system acts as an authoritative, empathetic, rapid-response assistant during
 - Generates evacuation routing guidance
 - Returns a single, polished, action-oriented safety briefing
 
-A custom command-center frontend visualizes the multi-agent pipeline in real time.
+A custom command-center frontend visualizes the multi-agent pipeline in real
+time — tool calls and their results, then each agent's answer streaming in:
+
+![The console mid-turn, showing the analyst's tool call, the live NWS forecast it returned, and its answer streaming in](./images/live_trace.jpg)
 
 Everything here runs against live APIs — no mocked responses, no canned demo script. Point it at a real US address during real weather and you get a real briefing.
 
@@ -74,6 +77,8 @@ The interesting parts, and where they live in the code:
 | **Input guardrails**             | `backend/app.py` → `custom_before_callback`      | Intercepts payloads before generation; blocks non-US locations (NWS constraint) and off-mission requests (poems, string ops, recipes, etc.).                                                       |
 | **Full-lifecycle observability** | `backend/observability.py`                       | Recursively attaches tracing callbacks to the entire agent tree (agent / model / tool hooks) and logs to stdout.                                                                                   |
 | **Portable model layer**         | `backend/llm.py`                                 | Resolves env vars into a LiteLLM config so every agent runs against Gemini, OpenAI, or any OpenAI-compatible endpoint — and fails at startup, with a readable banner, if the config is incomplete. |
+| **Warm start**                   | `backend/llm.py` → `warmup`                      | A background 1-token call at boot absorbs LiteLLM's ~10s lazy client setup and surfaces a bad key in the logs, instead of making the first user query look like a hang.                             |
+| **Streamed pipeline progress**   | `backend/app.py` → `_run_pipeline`               | One traversal drives both `/api/chat` and the SSE `/api/chat/stream`, emitting handoffs, tool arguments, tool payloads, per-agent output and model tokens as they land.                            |
 
 ---
 
@@ -97,12 +102,12 @@ variables in your shell.
 ```bash
 export LLM_API_KEY="sk-your-key"
 export LLM_BASE_URL="https://api.openai.com/v1"
-export LLM_MODEL="gpt-4o-mini"
+export LLM_MODEL="gpt-4.1-mini"
 ```
 
 | Provider                  | `LLM_BASE_URL`                         | Example `LLM_MODEL`                       |
 | :------------------------ | :------------------------------------- | :---------------------------------------- |
-| OpenAI                    | `https://api.openai.com/v1`            | `gpt-4o-mini`                             |
+| OpenAI                    | `https://api.openai.com/v1`            | `gpt-4.1-mini`                            |
 | Groq                      | `https://api.groq.com/openai/v1`       | `llama-3.3-70b-versatile`                 |
 | Together                  | `https://api.together.xyz/v1`          | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
 | OpenRouter                | `https://openrouter.ai/api/v1`         | `anthropic/claude-sonnet-5`               |
@@ -174,7 +179,7 @@ container actually resolved:
 ```json
 {
   "status": "ok",
-  "model": "openai/gpt-4o-mini",
+  "model": "openai/gpt-4.1-mini",
   "provider": "openai-compatible",
   "endpoint": "https://api.openai.com/v1"
 }
@@ -231,6 +236,9 @@ can use to invoke the hosted agent.
 ---
 
 ## 🔌 API
+
+**`GET /api/health`** — liveness, plus the model the container actually resolved.
+The console uses it to label itself; use it to confirm which endpoint you are hitting.
 
 **`POST /api/chat`** — run a turn, get the finished briefing.
 
@@ -358,6 +366,7 @@ Environment variables (set via shell or `docker-compose.yml`):
 | `GEMINI_API_KEY`      | ◑        | —                                         | Auth for Gemini via LiteLlm (the no-`LLM_*` default path)               |
 | `GOOGLE_API_KEY`      | ❌       | —                                         | Enables Google Maps geocoding (else Nominatim fallback)                 |
 | `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com`               | Contact identity in the NWS/Nominatim User-Agent header                 |
+| `LLM_WARMUP`          | ❌       | `true`                                    | One throwaway call at startup so the first query isn't slow             |
 | `LITELLM_NUM_RETRIES` | ❌       | `3`                                       | LiteLlm retry count                                                     |
 
 ◑ = one of `LLM_API_KEY` or `GEMINI_API_KEY` is required (local endpoints that
