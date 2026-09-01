@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # 1. FastAPI API Gateway & Multi-Agent Framework Core
   backend-engine:
@@ -10,12 +8,28 @@ services:
     ports:
       - "8008:8000"
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      # - AGENT_MODEL_NAME=gemini/gemini-2.5-flash-lite
-      - AGENT_MODEL_NAME=gemini/gemma-4-26b-a4b-it
+      # --- Model: any OpenAI-compatible endpoint, or Gemini ---------------
+      # Set these in readynow/.env (copy .env.example) or export them first.
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # --- Optional extras ------------------------------------------------
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}          # premium geocoding; else Nominatim
+      - READYNOW_CONTACT=${READYNOW_CONTACT:-}      # User-Agent identity for NWS/Nominatim
+      - LITELLM_NUM_RETRIES=${LITELLM_NUM_RETRIES:-3}
       - ADK_SUPPRESS_GEMINI_LITELLM_WARNINGS=true
-      - ADK_ENABLE_TRACING=false # limit noise in logs running lcoally with no otel
-      - LITELLM_NUM_RETRIES=3
+      - ADK_ENABLE_TRACING=false # limit noise in logs running locally with no otel
+    # Lets LLM_BASE_URL=http://host.docker.internal:11434/v1 reach an Ollama /
+    # LM Studio / vLLM server running on the host, on Linux as well as Mac.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
 
   # 2. Lightweight Web Server serving the Frontend Dashboard
   frontend-ui:

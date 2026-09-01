@@ -10,11 +10,19 @@ Nathan Verrill, June 2026
 
 ---
 
-Grab a key from ([Google AI Studio](https://aistudio.google.com/app/apikey))
+Bring any OpenAI-compatible endpoint — OpenAI, Groq, Together, OpenRouter,
+DeepSeek, vLLM, a local Ollama, or your own gateway. Set a key, run one command:
 
-`export GEMINI_API_KEY="{YOUR KEY HERE}"` 
+```bash
+export LLM_API_KEY="{YOUR KEY HERE}"
+export LLM_BASE_URL="https://api.openai.com/v1"   # any /v1 endpoint
+export LLM_MODEL="gpt-4o-mini"
 
-`docker compose -f readynow/docker-compose.yml up -d --build`
+docker compose -f readynow/docker-compose.yml up -d --build
+```
+
+Prefer Gemini? `export GEMINI_API_KEY="{YOUR KEY HERE}"` on its own is enough
+([get one here](https://aistudio.google.com/app/apikey)).
 
 Go to ([http://localhost:9009](http://localhost:9009))
 
@@ -38,6 +46,8 @@ The system acts as an authoritative, empathetic, rapid-response assistant during
 A custom command-center frontend visualizes the multi-agent pipeline in real time.
 
 Everything here runs against live APIs — no mocked responses, no canned demo script. Point it at a real US address during real weather and you get a real briefing.
+
+The model layer is deliberately not tied to one vendor: the same container runs on Gemini, on OpenAI, on a hosted OpenAI-compatible provider, or on a laptop-local Ollama, selected entirely by environment variables.
 
 ---
 
@@ -63,6 +73,7 @@ The interesting parts, and where they live in the code:
 | **Resilient geocoding**             | `backend/app.py` → `geocode_and_get_weather`     | Uses **Google Maps Geocoding** when `GOOGLE_API_KEY` is set, falling back to **Nominatim (OpenStreetMap)** so the tool never hard-fails.     |
 | **Input guardrails**                | `backend/app.py` → `custom_before_callback`      | Intercepts payloads before generation; blocks non-US locations (NWS constraint) and off-mission requests (poems, string ops, recipes, etc.). |
 | **Full-lifecycle observability**    | `backend/observability.py`                       | Recursively attaches tracing callbacks to the entire agent tree (agent / model / tool hooks) and logs to stdout.                             |
+| **Portable model layer**            | `backend/llm.py`                                 | Resolves env vars into a LiteLLM config so every agent runs against Gemini, OpenAI, or any OpenAI-compatible endpoint — and fails at startup, with a readable banner, if the config is incomplete. |
 
 ---
 
@@ -71,29 +82,64 @@ The interesting parts, and where they live in the code:
 ### Prerequisites
 
 - [Docker](https://www.docker.com/) with Docker Compose
-- A **Gemini API key** ([Google AI Studio](https://aistudio.google.com/app/apikey))
+- An API key for any OpenAI-compatible provider — or a **Gemini API key**
+  ([Google AI Studio](https://aistudio.google.com/app/apikey)), or a local model
+  server, in which case no key at all
 
-### 1. Set environment variables
+### 1. Point it at a model
+
+Copy [`readynow/.env.example`](./readynow/.env.example) to `readynow/.env` and fill
+in one section (Compose picks the file up automatically), or just export the
+variables in your shell.
+
+**Any OpenAI-compatible endpoint:**
 
 ```bash
-# Required — used by LiteLlm to reach Gemini
-export GEMINI_API_KEY="your-gemini-api-key"
+export LLM_API_KEY="sk-your-key"
+export LLM_BASE_URL="https://api.openai.com/v1"
+export LLM_MODEL="gpt-4o-mini"
+```
 
-# Optional — enables premium Google Maps geocoding (otherwise falls back to Nominatim)
+| Provider   | `LLM_BASE_URL`                      | Example `LLM_MODEL`         |
+| :--------- | :---------------------------------- | :-------------------------- |
+| OpenAI     | `https://api.openai.com/v1`         | `gpt-4o-mini`               |
+| Groq       | `https://api.groq.com/openai/v1`    | `llama-3.3-70b-versatile`   |
+| Together   | `https://api.together.xyz/v1`       | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| OpenRouter | `https://openrouter.ai/api/v1`      | `anthropic/claude-sonnet-5` |
+| DeepSeek   | `https://api.deepseek.com/v1`       | `deepseek-chat`             |
+| Ollama / LM Studio / vLLM | `http://host.docker.internal:11434/v1` | `llama3.1:8b`  |
+
+Local servers that ignore auth need no key — leave `LLM_API_KEY` unset.
+Whatever you choose, **the model must support tool calling**: ReadyNow! delegates
+through tools, so a text-only model will not complete the pipeline.
+
+**Or Gemini, the original path:**
+
+```bash
+export GEMINI_API_KEY="your-gemini-api-key"
+export LLM_MODEL="gemini/gemini-2.5-flash"   # optional; this is the default
+```
+
+**Optional extras:**
+
+```bash
+# Enables premium Google Maps geocoding (otherwise falls back to Nominatim)
 export GOOGLE_API_KEY="your-google-maps-api-key"
 
-# Optional — identifies your deployment in the NWS/Nominatim User-Agent header
+# Identifies your deployment in the NWS/Nominatim User-Agent header
 export READYNOW_CONTACT="you@example.com"
 ```
 
-> The repo also reads `GOOGLE_API_KEY` inside the geocoding tool. If you only set
-> `GEMINI_API_KEY`, the agent still works — geocoding simply uses the free
-> Nominatim fallback.
+A model id that already carries a LiteLLM provider prefix (`anthropic/…`,
+`groq/…`, `bedrock/…`) is passed straight through, so any LiteLLM-supported
+provider works even without the OpenAI shim. If nothing is configured the
+backend stops at startup and prints exactly what to set, rather than failing
+mid-request.
 
 ### 2. Build and run
 
 ```bash
-docker compose up --build
+docker compose -f readynow/docker-compose.yml up -d --build
 ```
 
 This starts two services:
@@ -111,7 +157,18 @@ Navigate to:
 http://localhost:9009
 ```
 
-The backend API is available directly at `http://localhost:8008/api/chat`.
+The backend API is available directly at `http://localhost:8008/api/chat`, and
+`GET http://localhost:8008/api/health` reports which model and endpoint the
+container actually resolved:
+
+```json
+{
+  "status": "ok",
+  "model": "openai/gpt-4o-mini",
+  "provider": "openai-compatible",
+  "endpoint": "https://api.openai.com/v1"
+}
+```
 
 ### Try a prompt
 
@@ -216,10 +273,12 @@ agent-patterns-google-adk/
 └── readynow/                # The ReadyNow! application
     ├── Dockerfile.backend   # Python 3.12 image for the FastAPI + ADK backend
     ├── docker-compose.yml   # Backend + Nginx frontend service definitions
+    ├── .env.example         # Model configuration template
     ├── requirements.txt     # Top-level Python dependencies
     ├── example_agentlog.txt # Sample full-lifecycle trace output
     ├── backend/
     │   ├── app.py           # FastAPI app, ADK agents, tools, and guardrails
+    │   ├── llm.py           # Provider-agnostic model resolution
     │   ├── observability.py # Recursive multi-agent tracing utility
     │   ├── deploy.py        # Deployment helper
     │   └── requirements.txt # Backend Python dependencies
@@ -249,20 +308,34 @@ one ADK building block:
 
 Environment variables (set via shell or `docker-compose.yml`):
 
-| Variable              | Required | Default                   | Purpose                                                 |
-| :-------------------- | :------- | :------------------------ | :------------------------------------------------------ |
-| `GEMINI_API_KEY`      | ✅       | —                         | Auth for Gemini via LiteLlm                             |
-| `AGENT_MODEL_NAME`    | ❌       | `gemini/gemini-2.5-flash` | Model used by all agents                                |
-| `GOOGLE_API_KEY`      | ❌       | —                         | Enables Google Maps geocoding (else Nominatim fallback) |
-| `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com` | Contact identity in the NWS/Nominatim User-Agent header |
-| `LITELLM_NUM_RETRIES` | ❌       | `3`                       | LiteLlm retry count                                     |
+| Variable              | Required | Default                     | Purpose                                                     |
+| :-------------------- | :------- | :-------------------------- | :---------------------------------------------------------- |
+| `LLM_API_KEY`         | ◑        | —                           | Key for the OpenAI-compatible endpoint (`OPENAI_API_KEY` also accepted) |
+| `LLM_BASE_URL`        | ❌       | provider default            | OpenAI-compatible endpoint, e.g. `https://api.groq.com/openai/v1` |
+| `LLM_MODEL`           | ❌       | `gemini/gemini-2.5-flash` / `gpt-4o-mini` | Model id; a provider prefix is honored as-is  |
+| `GEMINI_API_KEY`      | ◑        | —                           | Auth for Gemini via LiteLlm (the no-`LLM_*` default path)   |
+| `GOOGLE_API_KEY`      | ❌       | —                           | Enables Google Maps geocoding (else Nominatim fallback)     |
+| `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com` | Contact identity in the NWS/Nominatim User-Agent header     |
+| `LITELLM_NUM_RETRIES` | ❌       | `3`                         | LiteLlm retry count                                         |
+
+◑ = one of `LLM_API_KEY` or `GEMINI_API_KEY` is required (local endpoints that
+ignore auth need neither). `AGENT_MODEL_NAME` still works as an alias for
+`LLM_MODEL`.
 
 ---
 
 ## 🛟 Troubleshooting
 
-- **`Engine error 500` / quota messages** — the Gemini free tier has daily limits.
-  Wait for the reset or swap in a new `GEMINI_API_KEY`.
+- **Backend exits immediately** — it prints the missing model configuration on
+  stdout (`docker compose logs backend-engine`). Set `LLM_API_KEY` or
+  `GEMINI_API_KEY`.
+- **`Engine error 500` / quota messages** — check `/api/health` to confirm which
+  endpoint you hit, then check that provider's quota. The Gemini free tier has
+  daily limits; wait for the reset or swap in a new key.
+- **Agent replies but never calls a tool** — the model you pointed at probably
+  doesn't support tool calling. Pick one that does.
+- **Local model unreachable from Docker** — use `host.docker.internal`, not
+  `localhost`, in `LLM_BASE_URL`; `localhost` resolves to the container itself.
 - **`Link interrupt` in the UI** — confirm the backend container is running and
   reachable on `:8008` (`docker compose ps`).
 - **Non-US location refused** — by design; NWS only covers US territories.

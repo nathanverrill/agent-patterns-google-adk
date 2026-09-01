@@ -10,16 +10,14 @@ import requests
 from google.adk.agents import Agent, SequentialAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk.models.lite_llm import LiteLlm
 from google.genai import types
 
 import warnings
 warnings.filterwarnings("ignore", message=".*JSON_SCHEMA_FOR_FUNC_DECL.*")
 
 from observability import configure_logging, attach_observability
+from llm import MODEL_CONFIG, build_model
 logger = logging.getLogger("ReadyNowBackend")
-
-MODEL_NAME = os.getenv("AGENT_MODEL_NAME", "gemini/gemini-2.5-flash")
 
 app = FastAPI(title="Project ReadyNow! - FEMA Emergency Assistant API")
 
@@ -144,20 +142,20 @@ def calculate_evacuation_routes(origin: str, hazard_zone: str) -> Dict[str, Any]
 
 search_agent = Agent(
     name="disaster_analyst",
-    model=LiteLlm(model=MODEL_NAME),
+    model=build_model(),
     instruction="Extract location safety parameters and retrieve raw weather patterns or route metrics using tools.",
     tools=[geocode_and_get_weather, calculate_evacuation_routes]
 )
 
 critique_agent = Agent(
     name="safety_coordinator",
-    model=LiteLlm(model=MODEL_NAME),
+    model=build_model(),
     instruction="Review tactical report content. Highlight action directives, clear up complex terminology, and verify life-safety protocols stand out."
 )
 
 refine_agent = Agent(
     name="refining_editor",
-    model=LiteLlm(model=MODEL_NAME),
+    model=build_model(),
     instruction="Combine the findings and safety guidelines into a crisp, authoritative response. Keep it clear and action-oriented."
 )
 
@@ -169,7 +167,7 @@ answer_team = SequentialAgent(
 
 root_agent = Agent(
     name="ReadyNow_Command_Root",
-    model=LiteLlm(model=MODEL_NAME),
+    model=build_model(),
     instruction="""You are the commanding voice of Project ReadyNow!, a high-performance FEMA Emergency AI Assistant.
     Your demeanor is authoritative, highly reassuring, deeply empathetic, and clear under pressure. 
     You never engage in frivolous tasks. When users present emergency scenarios, pass them to your 'fema_response_pipeline' 
@@ -181,6 +179,8 @@ root_agent = Agent(
 
 configure_logging()
 
+logger.info(f"🧠 MODEL: {MODEL_CONFIG.describe()}")
+
 attach_observability(root_agent)
 
 runner = Runner(
@@ -188,6 +188,17 @@ runner = Runner(
     session_service=session_service,
     app_name="ReadyNowEmergencyApp"
 )
+
+@app.get("/api/health")
+async def health_endpoint():
+    """Confirms the engine is up and reports which model it is wired to."""
+    return {
+        "status": "ok",
+        "model": MODEL_CONFIG.model,
+        "provider": MODEL_CONFIG.provider,
+        "endpoint": MODEL_CONFIG.api_base or "provider default",
+    }
+
 
 class ChatRequest(BaseModel):
     user_id: str
