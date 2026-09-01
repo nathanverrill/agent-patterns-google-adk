@@ -1,10 +1,11 @@
 import asyncio
 import json
+import math
 import os
 import sys
 import logging
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -89,70 +90,238 @@ def custom_after_callback(callback_context: Any, llm_response: Any) -> None:
     except Exception:
         pass
 
-def geocode_and_get_weather(address: str) -> Dict[str, Any]:
-    """Retrieves geospatial coordinates and fetches active NWS weather forecasts.
-    
-    Dynamically attempts Google Maps Geocoding if an API key is available,
-    falling back seamlessly to Nominatim OpenStreetMap if unauthenticated.
-    """
-    headers = {"User-Agent": f"ReadyNowEmergencyAgent/1.0 ({os.getenv('READYNOW_CONTACT', 'readynow-demo@example.com')})"}
-    api_key = os.getenv("GOOGLE_API_KEY")
-    lat, lon = None, None
+def _request_headers() -> Dict[str, str]:
+    """Identify ourselves to the free OSM/NWS services, as their policies ask."""
+    contact = os.getenv("READYNOW_CONTACT", "readynow-demo@example.com")
+    return {"User-Agent": f"ReadyNowEmergencyAgent/1.0 ({contact})"}
 
-    # --- Step 1: Geocoding Phase ---
+
+def _geocode(address: str) -> Optional[Tuple[float, float]]:
+    """Resolve an address to (lat, lon), or None if nothing matched.
+
+    Google Maps when a key is configured, Nominatim (OpenStreetMap) otherwise,
+    so the tool still works with no keys beyond the model's.
+    """
+    api_key = os.getenv("GOOGLE_API_KEY")
+
     if api_key:
         try:
             logger.info("📡 GOOGLE MAPS API: Attempting premium geocoding array resolution...")
             google_url = f"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}"
-            g_res = requests.get(google_url, timeout=5)
-            data = g_res.json()
-            
+            data = requests.get(google_url, timeout=5).json()
+
             if data.get("status") == "OK":
                 location = data["results"][0]["geometry"]["location"]
                 lat, lon = float(location["lat"]), float(location["lng"])
                 logger.info(f"🎯 GOOGLE MAPS SUCCESS: Resolved coordinates [{lat:.4f}, {lon:.4f}]")
-            else:
-                logger.warning(f"⚠️ GOOGLE MAPS ERROR: Status returned {data.get('status')}. Dropping to fallback matrix...")
+                return lat, lon
+            logger.warning(f"⚠️ GOOGLE MAPS ERROR: Status returned {data.get('status')}. Dropping to fallback matrix...")
         except Exception as google_err:
             logger.warning(f"⚠️ GOOGLE MAPS EXCEPTION: {google_err}. Dropping to fallback matrix...")
 
-    # Fall back to Nominatim if Google geocoding was bypassed or failed
-    if lat is None or lon is None:
-        try:
-            logger.info("🌐 NOMINATIM FALLBACK: Initiating open geocoding backup array...")
-            nom_url = f"https://nominatim.openstreetmap.org/search?q={address}&format=json&limit=1"
-            n_res = requests.get(nom_url, headers=headers, timeout=5)
-            
-            if n_res.json():
-                data = n_res.json()[0]
-                lat, lon = float(data["lat"]), float(data["lon"])
-                logger.info(f"🎯 NOMINATIM SUCCESS: Resolved coordinates [{lat:.4f}, {lon:.4f}]")
-            else:
-                return {"error": "Target location could not be verified by any geospatial arrays."}
-        except Exception as nom_err:
-            return {"error": f"Geospatial resolution array failure: {str(nom_err)}"}
-
-    # --- Step 2: Weather Telemetry Phase ---
     try:
+        logger.info("🌐 NOMINATIM FALLBACK: Initiating open geocoding backup array...")
+        nom_url = f"https://nominatim.openstreetmap.org/search?q={address}&format=json&limit=1"
+        results = requests.get(nom_url, headers=_request_headers(), timeout=5).json()
+        if results:
+            lat, lon = float(results[0]["lat"]), float(results[0]["lon"])
+            logger.info(f"🎯 NOMINATIM SUCCESS: Resolved coordinates [{lat:.4f}, {lon:.4f}]")
+            return lat, lon
+    except Exception as nom_err:
+        logger.warning(f"⚠️ NOMINATIM EXCEPTION: {nom_err}")
+
+    return None
+
+
+def geocode_and_get_weather(address: str) -> Dict[str, Any]:
+    """Retrieves geospatial coordinates and fetches active NWS weather forecasts.
+
+    Dynamically attempts Google Maps Geocoding if an API key is available,
+    falling back seamlessly to Nominatim OpenStreetMap if unauthenticated.
+    """
+    point = _geocode(address)
+    if point is None:
+        return {"error": "Target location could not be verified by any geospatial arrays."}
+    lat, lon = point
+
+    try:
+        headers = _request_headers()
         nws_res = requests.get(f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}", headers=headers, timeout=5)
         if nws_res.status_code != 200:
             return {"error": f"Meteorological data telemetry unreachable (NWS Status {nws_res.status_code})."}
-        
+
         forecast_url = nws_res.json()["properties"]["forecast"]
         forecast_res = requests.get(forecast_url, headers=headers, timeout=5)
         return {"forecast": forecast_res.json()["properties"]["periods"][0]["detailedForecast"]}
     except Exception as e:
         return {"error": f"Meteorological trace exception: {str(e)}"}
 
-def calculate_evacuation_routes(origin: str, hazard_zone: str) -> Dict[str, Any]:
+
+# --------------------------------------------------------------------------- #
+# Evacuation routing — real roads, via OSRM on OpenStreetMap data
+# --------------------------------------------------------------------------- #
+EARTH_RADIUS_KM = 6371.0
+EVAC_DISTANCE_KM = 40.0          # far enough to clear a local hazard
+HAZARD_SANITY_KM = 200.0         # farther than this and the "hazard" geocode is junk
+COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+
+def _osrm_base() -> str:
+    """The public demo server is fine for a demo; point at your own for real load."""
+    # Compose passes unset variables through as "", so don't trust getenv's default.
+    return (os.getenv("OSRM_BASE_URL", "").strip() or "https://router.project-osrm.org").rstrip("/")
+
+
+def _compass(bearing: float) -> str:
+    return COMPASS[int((bearing % 360) / 45.0 + 0.5) % 8]
+
+
+def _destination_point(lat: float, lon: float, bearing: float, km: float) -> Tuple[float, float]:
+    """Great-circle point `km` away from (lat, lon) along `bearing` degrees."""
+    br, lat1, lon1 = math.radians(bearing), math.radians(lat), math.radians(lon)
+    d = km / EARTH_RADIUS_KM
+    lat2 = math.asin(math.sin(lat1) * math.cos(d) + math.cos(lat1) * math.sin(d) * math.cos(br))
+    lon2 = lon1 + math.atan2(
+        math.sin(br) * math.sin(d) * math.cos(lat1),
+        math.cos(d) - math.sin(lat1) * math.sin(lat2),
+    )
+    return math.degrees(lat2), (math.degrees(lon2) + 540) % 360 - 180
+
+
+def _bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dl = math.radians(lon2 - lon1)
+    y = math.sin(dl) * math.cos(p2)
+    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
+
+
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
+
+
+def _osrm_route(origin: Tuple[float, float], dest: Tuple[float, float]) -> Optional[Dict[str, Any]]:
+    """Ask OSRM for a driving route and summarise the roads it uses."""
+    url = (
+        f"{_osrm_base()}/route/v1/driving/"
+        f"{origin[1]:.5f},{origin[0]:.5f};{dest[1]:.5f},{dest[0]:.5f}"
+        "?overview=false&steps=true&alternatives=false"
+    )
+    try:
+        payload = requests.get(url, headers=_request_headers(), timeout=8).json()
+    except Exception as err:
+        logger.warning(f"⚠️ OSRM EXCEPTION: {err}")
+        return None
+
+    if payload.get("code") != "Ok" or not payload.get("routes"):
+        logger.warning(f"⚠️ OSRM ERROR: {payload.get('code')}")
+        return None
+
+    route = payload["routes"][0]
+    roads: List[str] = []
+    for leg in route.get("legs", []):
+        for step in leg.get("steps", []):
+            name = (step.get("ref") or step.get("name") or "").strip()
+            if name and name not in roads:
+                roads.append(name)
+
     return {
-        "status": "TACTICAL ROUTE COMPILED",
-        "origin": origin,
-        "hazard_source": hazard_zone,
-        "primary_evacuation_corridor": "Take Interstate 44 Westbound away from the vector core.",
-        "secondary_artery": "Route 66 Outbound to regional shelter staging structures.",
-        "emergency_directive": "Keep radio tuned to local frequencies. Do not traverse standing water arrays."
+        "distance_km": round(route["distance"] / 1000.0, 1),
+        "drive_time_min": round(route["duration"] / 60.0),
+        "via": " → ".join(roads[:4]) if roads else "local roads",
     }
+
+
+def _locate_hazard(hazard_zone: str) -> Optional[Tuple[float, float]]:
+    """Best effort at placing a hazard description on the map.
+
+    The model tends to pass things like "Tornado warning near Carthage, MO",
+    which no geocoder resolves. Retry on the place name after "near"/"around"
+    before giving up.
+    """
+    if not hazard_zone:
+        return None
+
+    candidates = [hazard_zone]
+    lowered = hazard_zone.lower()
+    for marker in (" near ", " around ", " at ", " in "):
+        if marker in lowered:
+            candidates.append(hazard_zone[lowered.rindex(marker) + len(marker):])
+
+    for candidate in candidates:
+        candidate = candidate.strip(" .,")
+        if candidate:
+            point = _geocode(candidate)
+            if point:
+                return point
+    return None
+
+
+def calculate_evacuation_routes(origin: str, hazard_zone: str) -> Dict[str, Any]:
+    """Computes real driving evacuation routes leading away from a hazard.
+
+    Geocodes the origin, works out which way the hazard lies, then asks OSRM
+    (routing over OpenStreetMap data) for driving routes along the headings
+    that lead away from it. Returns real roads, distances and drive times.
+    """
+    point = _geocode(origin)
+    if point is None:
+        return {"error": f"Could not resolve evacuation origin '{origin}'."}
+    lat, lon = point
+
+    # Where is the hazard? Often it's a phrase like "tornado" that won't geocode,
+    # or resolves somewhere absurd — in that case just route outward generally.
+    hazard_bearing = None
+    hazard_point = _locate_hazard(hazard_zone)
+    if hazard_point:
+        span = _distance_km(lat, lon, *hazard_point)
+        if span <= HAZARD_SANITY_KM and span > 1.0:
+            hazard_bearing = _bearing(lat, lon, *hazard_point)
+            logger.info(f"🧭 HAZARD VECTOR: bearing {hazard_bearing:.0f}° ({_compass(hazard_bearing)}), {span:.0f} km out")
+
+    # Head directly away from the hazard, plus two flanking headings as backups.
+    away = (hazard_bearing + 180) % 360 if hazard_bearing is not None else 0.0
+    headings = [away, (away + 60) % 360, (away - 60) % 360]
+
+    routes: List[Dict[str, Any]] = []
+    for heading in headings:
+        dest = _destination_point(lat, lon, heading, EVAC_DISTANCE_KM)
+        logger.info(f"🛣️ OSRM: routing {_compass(heading)} from [{lat:.4f}, {lon:.4f}]")
+        leg = _osrm_route((lat, lon), dest)
+        if leg:
+            leg["heading"] = _compass(heading)
+            routes.append(leg)
+        if len(routes) == 2:
+            break
+
+    if not routes:
+        # OSRM unreachable — degrade to static guidance rather than failing the turn,
+        # the same way geocoding degrades to Nominatim.
+        logger.warning("⚠️ OSRM UNREACHABLE: falling back to static corridor guidance")
+        return {
+            "status": "STATIC FALLBACK — routing service unreachable",
+            "origin": origin,
+            "hazard_source": hazard_zone,
+            "primary_evacuation_corridor": "Move perpendicular to the hazard's path on the nearest major highway.",
+            "emergency_directive": "Keep radio tuned to local frequencies. Do not traverse standing water.",
+        }
+
+    result: Dict[str, Any] = {
+        "status": "ROUTE COMPILED — OSRM over OpenStreetMap",
+        "origin": origin,
+        "origin_coordinates": [round(lat, 4), round(lon, 4)],
+        "hazard_source": hazard_zone,
+        "hazard_direction": _compass(hazard_bearing) if hazard_bearing is not None else "unlocated",
+        "primary_evacuation_corridor": routes[0],
+        "emergency_directive": "Keep radio tuned to local frequencies. Do not traverse standing water.",
+    }
+    if len(routes) > 1:
+        result["secondary_artery"] = routes[1]
+    return result
+
 
 search_agent = Agent(
     name="disaster_analyst",

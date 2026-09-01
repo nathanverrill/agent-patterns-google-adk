@@ -40,7 +40,7 @@ The system acts as an authoritative, empathetic, rapid-response assistant during
 
 - Geocodes the location (Google Maps API, with an OpenStreetMap/Nominatim fallback)
 - Pulls a live forecast from the **National Weather Service (NWS)** API
-- Generates evacuation routing guidance
+- Computes real driving evacuation routes **away from** the hazard — OSRM routing over OpenStreetMap data, returning actual roads, distances and drive times
 - Returns a single, polished, action-oriented safety briefing
 
 A custom command-center frontend visualizes the multi-agent pipeline in real
@@ -49,6 +49,10 @@ time — tool calls and their results, then each agent's answer streaming in:
 ![The console mid-turn, showing the analyst's tool call, the live NWS forecast it returned, and its answer streaming in](./images/live_trace.jpg)
 
 Everything here runs against live APIs — no mocked responses, no canned demo script. Point it at a real US address during real weather and you get a real briefing.
+
+Three live sources ground it, none of which need a paid key: the **National
+Weather Service** for conditions, **Nominatim** (OpenStreetMap) for geocoding,
+and **OSRM** for routing over OpenStreetMap road data.
 
 The model layer is deliberately not tied to one vendor: the same container runs on Gemini, on OpenAI, on a hosted OpenAI-compatible provider, or on a laptop-local Ollama, selected entirely by environment variables.
 
@@ -72,7 +76,7 @@ The interesting parts, and where they live in the code:
 | **Authoritative root persona**   | `backend/app.py` → `ReadyNow_Command_Root`       | A supervisor `Agent` with a reassuring, command-centric FEMA persona that parses context and delegates.                                                                                            |
 | **Multi-agent team**             | `backend/app.py` → `fema_response_pipeline`      | A `SequentialAgent` chaining data retrieval → safety review → final editing as isolated sub-agents.                                                                                                |
 | **Live weather grounding**       | `backend/app.py` → `geocode_and_get_weather`     | Calls the live National Weather Service API using point coordinates.                                                                                                                               |
-| **Evacuation routing**           | `backend/app.py` → `calculate_evacuation_routes` | Produces actionable primary/secondary routes and safety directives.                                                                                                                                |
+| **Evacuation routing**           | `backend/app.py` → `calculate_evacuation_routes` | Geocodes the origin, derives the hazard's bearing, then asks **OSRM** (routing on **OpenStreetMap** data) for driving routes along the headings leading away from it — real roads, distances, drive times, with static guidance as the fallback. |
 | **Resilient geocoding**          | `backend/app.py` → `geocode_and_get_weather`     | Uses **Google Maps Geocoding** when `GOOGLE_API_KEY` is set, falling back to **Nominatim (OpenStreetMap)** so the tool never hard-fails.                                                           |
 | **Input guardrails**             | `backend/app.py` → `custom_before_callback`      | Intercepts payloads before generation; blocks non-US locations (NWS constraint) and off-mission requests (poems, string ops, recipes, etc.).                                                       |
 | **Full-lifecycle observability** | `backend/observability.py`                       | Recursively attaches tracing callbacks to the entire agent tree (agent / model / tool hooks) and logs to stdout.                                                                                   |
@@ -365,7 +369,8 @@ Environment variables (set via shell or `docker-compose.yml`):
 | `LLM_MODEL`           | ❌       | `gemini/gemini-2.5-flash` / `gpt-4o-mini` | Model id; a provider prefix is honored as-is                            |
 | `GEMINI_API_KEY`      | ◑        | —                                         | Auth for Gemini via LiteLlm (the no-`LLM_*` default path)               |
 | `GOOGLE_API_KEY`      | ❌       | —                                         | Enables Google Maps geocoding (else Nominatim fallback)                 |
-| `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com`               | Contact identity in the NWS/Nominatim User-Agent header                 |
+| `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com`               | Contact identity in the NWS/Nominatim/OSRM User-Agent header            |
+| `OSRM_BASE_URL`       | ❌       | `https://router.project-osrm.org`         | Routing server; point at your own OSRM for anything beyond a demo       |
 | `LLM_WARMUP`          | ❌       | `true`                                    | One throwaway call at startup so the first query isn't slow             |
 | `LITELLM_NUM_RETRIES` | ❌       | `3`                                       | LiteLlm retry count                                                     |
 
@@ -392,6 +397,9 @@ ignore auth need neither). `AGENT_MODEL_NAME` still works as an alias for
   `localhost`, in `LLM_BASE_URL`; `localhost` resolves to the container itself.
 - **`Link interrupt` in the UI** — confirm the backend container is running and
   reachable on `:8008` (`docker compose ps`).
+- **Routes come back as `STATIC FALLBACK`** — OSRM was unreachable or rate
+  limited. The public demo server is meant for light use; run your own
+  (`docker run -p 5000:5000 osrm/osrm-backend`) and set `OSRM_BASE_URL`.
 - **Non-US location refused** — by design; NWS only covers US territories.
 - **Off-topic request refused** — by design; the guardrail keeps the assistant on
   emergency-response tasks only.
