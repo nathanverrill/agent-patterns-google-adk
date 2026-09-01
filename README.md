@@ -10,11 +10,15 @@ Nathan Verrill, June 2026
 
 ---
 
-Grab a key from https://aistudio.google.com/app/apikey
+Grab a key from ([Google AI Studio](https://aistudio.google.com/app/apikey))
 
 `export GEMINI_API_KEY=""` 
 
 `docker compose -f readynow/docker-compose.yml up -d --build`
+
+Go to ([http://localhost:9009](http://localhost:9009))
+
+Describe a situation in the form entry box on the bottom of the screen
 
 ---
 
