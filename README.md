@@ -12,7 +12,7 @@ Nathan Verrill, June 2026
 
 Grab a key from ([Google AI Studio](https://aistudio.google.com/app/apikey))
 
-`export GEMINI_API_KEY=""` 
+`export GEMINI_API_KEY="{YOUR KEY HERE}"` 
 
 `docker compose -f readynow/docker-compose.yml up -d --build`
 
