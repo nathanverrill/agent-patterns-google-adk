@@ -4,8 +4,8 @@ from google.cloud import storage
 from vertexai import agent_engines
 from app import app  # Imports your FastAPI app instance wrapper object
 
-# Target project credentials parameters mapping to workshop parameters
-gcp_project = os.getenv("GOOGLE_CLOUD_PROJECT", "qwiklabs-gcp-02-32eac43f4591")
+# Target project credentials
+gcp_project = os.getenv("GOOGLE_CLOUD_PROJECT")
 gcp_location = "us-central1"
 staging_bucket_name = f"{gcp_project}-agent-staging-bucket"
 
@@ -29,6 +29,6 @@ try:
         app,
         requirements=["google-cloud-aiplatform[agent_engines,adk]", "fastapi", "uvicorn", "requests"]
     )
-    print(f"\n✅ Challenge 6 Deployment Complete! Resource URI Name:\n{remote_agent.resource_name}")
+    print(f"\n✅ Deployment complete! Agent Engine resource name:\n{remote_agent.resource_name}")
 except Exception as e:
     print(f"⚠️ Remote Platform Error: {e}")

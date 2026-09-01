@@ -83,7 +83,7 @@ def geocode_and_get_weather(address: str) -> Dict[str, Any]:
     Dynamically attempts Google Maps Geocoding if an API key is available,
     falling back seamlessly to Nominatim OpenStreetMap if unauthenticated.
     """
-    headers = {"User-Agent": f"ReadyNowEmergencyAgent/1.0 ({os.getenv('QWIKLABS_USER', 'student-fema-session@qwiklabs.net')})"}
+    headers = {"User-Agent": f"ReadyNowEmergencyAgent/1.0 ({os.getenv('READYNOW_CONTACT', 'readynow-demo@example.com')})"}
     api_key = os.getenv("GOOGLE_API_KEY")
     lat, lon = None, None
 
