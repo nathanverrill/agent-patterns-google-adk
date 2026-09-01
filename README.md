@@ -159,9 +159,13 @@ http://localhost:9009
 
 The console reads `/api/health` on load and shows the model and endpoint it is
 actually talking to in the telemetry strip — nothing about the provider is
-hardcoded in the UI. While a turn runs, the response cluster advances on real
-handoffs streamed from the backend (`analyst → safety → editor`) and names the
-tool in flight, rather than animating a guess on a timer.
+hardcoded in the UI. While a turn runs you watch the actual work rather than a
+spinner: the response cluster advances on real handoffs
+(`analyst → safety → editor`), each tool call shows its arguments and what came
+back (the live NWS forecast text, the compiled routes), and every agent's answer
+types in token by token. When the turn ends the trace collapses into a
+`pipeline trace · N steps · Xs` disclosure above the briefing, so the run stays
+auditable without cluttering the log.
 
 The backend API is available directly at `http://localhost:8008/api/chat`, and
 `GET http://localhost:8008/api/health` reports which model and endpoint the
@@ -255,11 +259,22 @@ can show the pipeline working. Same request body; each frame is one `data:` line
 ```text
 data: {"type": "agent", "agent": "disaster_analyst", "stage": "analyst"}
 data: {"type": "tool", "agent": "disaster_analyst", "tool": "geocode_and_get_weather", "args": {"address": "Joplin, MO"}}
-data: {"type": "tool_result", "agent": "disaster_analyst", "tool": "geocode_and_get_weather"}
+data: {"type": "tool_result", "tool": "geocode_and_get_weather", "result": {"forecast": "Sunny, with a high near 101…"}}
+data: {"type": "delta", "agent": "disaster_analyst", "text": "There"}
+data: {"type": "delta", "agent": "disaster_analyst", "text": " is"}
+data: {"type": "agent_done", "agent": "disaster_analyst", "stage": "analyst", "text": "There is a tornado warning near…"}
 data: {"type": "agent", "agent": "safety_coordinator", "stage": "safety"}
-data: {"type": "agent", "agent": "refining_editor", "stage": "editor"}
 data: {"type": "final", "response": "..."}
 ```
+
+| Frame | Carries |
+| :--- | :--- |
+| `agent` | a handoff — which agent has the floor, and which rail stage it lights |
+| `tool` | the tool being called, with its arguments |
+| `tool_result` | what the tool actually returned, trimmed to 400 chars per field |
+| `delta` | model tokens, as they arrive (ADK `StreamingMode.SSE`) |
+| `agent_done` | one agent's finished output — the analyst's findings, the safety review |
+| `final` | the editor's polished briefing |
 
 Both routes share one traversal of the agent stream, so they can never disagree
 about what the pipeline did. Watch it from the terminal with:

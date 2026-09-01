@@ -515,6 +515,78 @@
         min-height: 1em;
       }
 
+      /* ---------- Live pipeline trace ---------- */
+      .trace {
+        margin-top: 10px;
+        max-height: 260px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-family: var(--f-mono);
+        font-size: 0.68rem;
+        line-height: 1.55;
+      }
+      .trow {
+        display: flex;
+        gap: 8px;
+        color: var(--text-dim);
+      }
+      .trow .tk {
+        flex: none;
+        width: 1em;
+        text-align: center;
+        color: var(--text-faint);
+      }
+      .trow.head .tv {
+        color: var(--amber-bright);
+        letter-spacing: 0.08em;
+      }
+      .trow.tool .tv {
+        color: var(--cyan);
+      }
+      .trow.result .tv {
+        color: var(--text-dim);
+      }
+      .trow.say .tv {
+        color: var(--text);
+        font-family: var(--f-body);
+        font-size: 0.8rem;
+      }
+      .trow.say.streaming .tv::after {
+        content: "▌";
+        color: var(--amber);
+        animation: blink 0.9s ease-in-out infinite;
+      }
+      .tracebox {
+        margin-bottom: 10px;
+      }
+      .tracebox summary {
+        cursor: pointer;
+        font-family: var(--f-mono);
+        font-size: 0.68rem;
+        letter-spacing: 0.06em;
+        color: var(--text-faint);
+        list-style: none;
+      }
+      .tracebox summary::marker,
+      .tracebox summary::-webkit-details-marker {
+        display: none;
+      }
+      .tracebox summary::before {
+        content: "▸ ";
+        color: var(--amber);
+      }
+      .tracebox[open] summary::before {
+        content: "▾ ";
+      }
+      .tracebox .trace {
+        max-height: 320px;
+        margin-top: 8px;
+        padding-left: 10px;
+        border-left: 1px solid var(--edge);
+      }
+
       /* ---------- Dispatch ---------- */
       .dispatch {
         flex: none;
@@ -872,13 +944,17 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
       }
 
       // ---- agent pipeline indicator ----
-      // Stages advance on real handoffs streamed from the backend, so what the
-      // rail shows is what the agents are actually doing.
+      // Stages advance on real handoffs streamed from the backend, and the
+      // trace below them shows the actual work: tool arguments, what the tools
+      // returned, and each agent's answer as its tokens arrive.
       const stages = ["analyst", "safety", "editor"];
       const stageLabels = { analyst: "ANALYST", safety: "SAFETY", editor: "EDITOR" };
       let inFlight = false;
       let activeStage = -1;
       let loaderEl = null;
+      let traceEl = null;
+      let sayEl = null;
+      let traceSteps = 0;
 
       function renderPipeline() {
         return stages
@@ -896,15 +972,39 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
       function startPipeline() {
         activeStage = -1;
         inFlight = true;
+        traceSteps = 0;
+        sayEl = null;
         loaderEl = document.createElement("div");
         loaderEl.className = "msg agent";
         loaderEl.innerHTML =
           `<span class="meta">ReadyNow · processing</span>` +
           `<div class="bubble"><div class="pipeline">${renderPipeline()}</div>` +
-          `<div class="pdetail">routing to response cluster…</div></div>`;
+          `<div class="trace"></div></div>`;
         chatWindow.appendChild(loaderEl);
+        traceEl = loaderEl.querySelector(".trace");
+        traceRow("·", "routing to response cluster…");
         chatWindow.scrollTop = chatWindow.scrollHeight;
         syncRail();
+      }
+
+      // Append one line to the live trace and keep it scrolled to the bottom.
+      function traceRow(key, value, kind) {
+        if (!traceEl) return null;
+        const row = document.createElement("div");
+        row.className = "trow" + (kind ? " " + kind : "");
+        const k = document.createElement("span");
+        k.className = "tk";
+        k.textContent = key;
+        const v = document.createElement("span");
+        v.className = "tv";
+        v.textContent = value;
+        row.appendChild(k);
+        row.appendChild(v);
+        traceEl.appendChild(row);
+        traceEl.scrollTop = traceEl.scrollHeight;
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        traceSteps += 1;
+        return v;
       }
 
       function setStage(name) {
@@ -915,8 +1015,19 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
         syncRail();
       }
 
-      function setDetail(text) {
-        if (loaderEl) loaderEl.querySelector(".pdetail").textContent = text;
+      // Flatten a tool's return value into one readable line.
+      function formatResult(result) {
+        if (result === null || result === undefined) return "no data";
+        if (typeof result !== "object") return String(result);
+        return Object.entries(result)
+          .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+          .join(" · ");
+      }
+
+      function formatArgs(args) {
+        return Object.entries(args || {})
+          .map(([k, v]) => `${k}="${v}"`)
+          .join(" ");
       }
 
       function syncRail() {
@@ -927,9 +1038,24 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
         });
       }
 
+      // Keep the trace after the turn ends, collapsed, so the run stays auditable.
+      function archiveTrace(ms) {
+        if (!traceEl) return null;
+        const box = document.createElement("details");
+        box.className = "tracebox";
+        const summary = document.createElement("summary");
+        summary.textContent = `pipeline trace · ${traceSteps} steps · ${(ms / 1000).toFixed(1)}s`;
+        box.appendChild(summary);
+        traceEl.querySelectorAll(".trow.streaming").forEach((r) => r.classList.remove("streaming"));
+        box.appendChild(traceEl);
+        return box;
+      }
+
       function stopPipeline() {
         inFlight = false;
         activeStage = -1;
+        sayEl = null;
+        traceEl = null;
         if (loaderEl) {
           loaderEl.remove();
           loaderEl = null;
@@ -990,11 +1116,6 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
         }
       }
 
-      function describeTool(evt) {
-        const arg = evt.args && (evt.args.address || evt.args.origin);
-        return arg ? `${evt.tool} · ${arg}` : evt.tool;
-      }
-
       async function sendMessage() {
         const text = inputEl.value.trim();
         if (!text || inFlight) return;
@@ -1017,28 +1138,58 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
             body,
           });
 
-        try {
-          let answer = null;
-          let streamError = null;
+        let answer = null;
+        let streamError = null;
 
+        // One event from the pipeline, rendered into the live trace.
+        function handleEvent(evt) {
+          switch (evt.type) {
+            case "agent":
+              if (evt.stage) {
+                setStage(evt.stage);
+                traceRow("⇢", stageLabels[evt.stage] + " engaged", "head");
+              }
+              sayEl = null;
+              break;
+            case "tool":
+              traceRow("⚙", `${evt.tool}(${formatArgs(evt.args)})`, "tool");
+              break;
+            case "tool_result":
+              traceRow("✓", formatResult(evt.result), "result");
+              break;
+            case "delta":
+              // Tokens arriving: open a line for this agent, then extend it.
+              if (!sayEl) sayEl = traceRow(" ", "", "say streaming");
+              if (sayEl) {
+                sayEl.textContent += evt.text;
+                sayEl.parentElement.parentElement.scrollTop =
+                  sayEl.parentElement.parentElement.scrollHeight;
+              }
+              break;
+            case "agent_done":
+              // Authoritative text for the agent that just finished.
+              if (!sayEl) sayEl = traceRow(" ", "", "say");
+              if (sayEl) {
+                sayEl.textContent = evt.text;
+                sayEl.parentElement.classList.remove("streaming");
+              }
+              sayEl = null;
+              break;
+            case "final":
+              answer = evt.response;
+              break;
+            case "error":
+              streamError = evt.detail;
+              break;
+          }
+        }
+
+        try {
           // Preferred path: watch the pipeline work in real time.
           let response = await post("/api/chat/stream");
 
           if (response.ok && response.body) {
-            await readEventStream(response, (evt) => {
-              if (evt.type === "agent") {
-                if (evt.stage) setStage(evt.stage);
-                else setDetail("routing to response cluster…");
-              } else if (evt.type === "tool") {
-                setDetail("⚙ " + describeTool(evt));
-              } else if (evt.type === "tool_result") {
-                setDetail("✓ " + evt.tool);
-              } else if (evt.type === "final") {
-                answer = evt.response;
-              } else if (evt.type === "error") {
-                streamError = evt.detail;
-              }
-            });
+            await readEventStream(response, handleEvent);
           } else if (response.status === 404) {
             // Backend predates the streaming route — fall back to the plain one.
             response = await post("/api/chat");
@@ -1046,9 +1197,9 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
           }
 
           const ms = Math.round(performance.now() - t0);
-          stopPipeline();
 
           if (streamError || (!answer && !response.ok)) {
+            stopPipeline();
             latencyEl.textContent = ms + " ms";
             linkEl.textContent = "Engine error " + response.status;
             linkEl.className = "v warn";
@@ -1062,10 +1213,17 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
             return;
           }
 
+          const archived = archiveTrace(ms);
+          stopPipeline();
+
           latencyEl.textContent = ms + " ms";
           linkEl.textContent = "Uplink online";
           linkEl.className = "v live";
-          appendMsg(answer, "agent", "ReadyNow");
+          const msgEl = appendMsg(answer, "agent", "ReadyNow");
+          if (archived) {
+            msgEl.querySelector(".bubble").prepend(archived);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+          }
         } catch (error) {
           stopPipeline();
           latencyEl.textContent = "— ms";

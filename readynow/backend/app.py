@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import requests
 
 from google.adk.agents import Agent, SequentialAgent
+from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -245,7 +246,16 @@ async def _ensure_session(user_id: str, session_id: str) -> None:
         pass
 
 
-async def _run_pipeline(payload: ChatRequest):
+def _summarize(value: Any, limit: int = 400) -> Any:
+    """Shrink a tool payload to something worth putting on the wire."""
+    if isinstance(value, dict):
+        return {k: _summarize(v, limit) for k, v in value.items()}
+    if isinstance(value, str) and len(value) > limit:
+        return value[:limit] + "…"
+    return value
+
+
+async def _run_pipeline(payload: ChatRequest, stream_tokens: bool = False):
     """Run one turn, yielding structured progress as the agents work.
 
     Yields dicts the SSE endpoint forwards verbatim and the plain JSON endpoint
@@ -261,6 +271,10 @@ async def _run_pipeline(payload: ChatRequest):
     await _ensure_session(payload.user_id, payload.session_id)
 
     content = types.Content(role="user", parts=[types.Part(text=payload.message)])
+    # Token streaming costs nothing extra but turns a 10-second wait into
+    # something the operator can watch, so the console asks for it.
+    run_config = RunConfig(streaming_mode=StreamingMode.SSE) if stream_tokens else None
+
     final_response = ""
     current_agent = None
 
@@ -268,11 +282,20 @@ async def _run_pipeline(payload: ChatRequest):
         user_id=payload.user_id,
         session_id=payload.session_id,
         new_message=content,
+        run_config=run_config,
     ):
         author = getattr(event, "author", None)
         if author and author != current_agent:
             current_agent = author
             yield {"type": "agent", "agent": author, "stage": STAGE_BY_AGENT.get(author)}
+
+        # Partial events are the model's tokens arriving; forward them as-is.
+        if getattr(event, "partial", False):
+            if event.content and event.content.parts:
+                chunk = event.content.parts[0].text
+                if chunk:
+                    yield {"type": "delta", "agent": author, "text": chunk}
+            continue
 
         for call in (event.get_function_calls() or []):
             # transfer_to_agent is ADK plumbing, not work the operator cares about.
@@ -281,12 +304,25 @@ async def _run_pipeline(payload: ChatRequest):
 
         for result in (event.get_function_responses() or []):
             if result.name != "transfer_to_agent":
-                yield {"type": "tool_result", "agent": author, "tool": result.name}
+                yield {
+                    "type": "tool_result",
+                    "agent": author,
+                    "tool": result.name,
+                    "result": _summarize(result.response),
+                }
 
         if event.is_final_response() and event.content and event.content.parts:
             text = event.content.parts[0].text
             if text and text.strip():
                 final_response = text
+                # Each agent's own finished output, so the console can show the
+                # analyst's findings and the safety review, not just the ending.
+                yield {
+                    "type": "agent_done",
+                    "agent": author,
+                    "stage": STAGE_BY_AGENT.get(author),
+                    "text": text,
+                }
 
     if not final_response:
         final_response = "Communication stream link lost. Please check environment diagnostics."
@@ -319,7 +355,7 @@ async def chat_stream_endpoint(payload: ChatRequest):
 
     async def event_source():
         try:
-            async for update in _run_pipeline(payload):
+            async for update in _run_pipeline(payload, stream_tokens=True):
                 yield f"data: {json.dumps(update)}\n\n"
         except asyncio.CancelledError:
             # Operator navigated away mid-turn; nothing to report.
