@@ -1,10 +1,12 @@
 import asyncio
+import json
 import os
 import sys
 import logging
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
@@ -216,54 +218,126 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
 
+
+APP_NAME = "ReadyNowEmergencyApp"
+
+# Which rail stage in the console each agent lights up. The root agent isn't a
+# stage — it's the dispatcher that hands off to the pipeline.
+STAGE_BY_AGENT = {
+    "disaster_analyst": "analyst",
+    "safety_coordinator": "safety",
+    "refining_editor": "editor",
+}
+
+
+async def _ensure_session(user_id: str, session_id: str) -> None:
+    """Register the session container, tolerating one that already exists."""
+    try:
+        await session_service.create_session(
+            user_id=user_id,
+            session_id=session_id,
+            app_name=APP_NAME,
+        )
+        logger.info(f"✨ Session created successfully: {session_id}")
+    except Exception:
+        # If it already exists, create_session might raise an error.
+        # We catch it safely here because it means the slot is ready for text operations.
+        pass
+
+
+async def _run_pipeline(payload: ChatRequest):
+    """Run one turn, yielding structured progress as the agents work.
+
+    Yields dicts the SSE endpoint forwards verbatim and the plain JSON endpoint
+    filters down to the final answer, so both routes are driven by exactly the
+    same traversal.
+
+    Every agent in the pipeline emits its own "final response" event, so
+    stopping at the first one would return the analyst's raw findings and
+    silently skip the safety review and the editor. Drain the stream and keep
+    the last non-empty response — the editor's polished dispatch — which also
+    lets the generator close cleanly instead of being cancelled mid-flight.
+    """
+    await _ensure_session(payload.user_id, payload.session_id)
+
+    content = types.Content(role="user", parts=[types.Part(text=payload.message)])
+    final_response = ""
+    current_agent = None
+
+    async for event in runner.run_async(
+        user_id=payload.user_id,
+        session_id=payload.session_id,
+        new_message=content,
+    ):
+        author = getattr(event, "author", None)
+        if author and author != current_agent:
+            current_agent = author
+            yield {"type": "agent", "agent": author, "stage": STAGE_BY_AGENT.get(author)}
+
+        for call in (event.get_function_calls() or []):
+            # transfer_to_agent is ADK plumbing, not work the operator cares about.
+            if call.name != "transfer_to_agent":
+                yield {"type": "tool", "agent": author, "tool": call.name, "args": dict(call.args or {})}
+
+        for result in (event.get_function_responses() or []):
+            if result.name != "transfer_to_agent":
+                yield {"type": "tool_result", "agent": author, "tool": result.name}
+
+        if event.is_final_response() and event.content and event.content.parts:
+            text = event.content.parts[0].text
+            if text and text.strip():
+                final_response = text
+
+    if not final_response:
+        final_response = "Communication stream link lost. Please check environment diagnostics."
+
+    yield {"type": "final", "response": final_response}
+
+
 @app.post("/api/chat")
 async def chat_endpoint(payload: ChatRequest):
+    """Run a turn and return only the finished briefing."""
     try:
-        # Define a single source of truth for the application identifier string
-        APP_NAME = "ReadyNowEmergencyApp"
-
-        # Force initialize/ensure the session container is registered in memory
-        try:
-            await session_service.create_session(
-                user_id=payload.user_id,
-                session_id=payload.session_id,
-                app_name=APP_NAME
-            )
-            logger.info(f"✨ Session created successfully: {payload.session_id}")
-        except Exception:
-            # If it already exists, create_session might raise an error.
-            # We catch it safely here because it means the slot is ready for text operations.
-            pass
-
-        content = types.Content(role='user', parts=[types.Part(text=payload.message)])
         final_response = ""
-        
-        # Drive the workflow generator natively.
-        #
-        # Every agent in the pipeline emits its own "final response" event, so
-        # breaking on the first one would return the analyst's raw findings and
-        # silently skip the safety review and the editor. Drain the stream and
-        # keep the last non-empty response — the editor's polished dispatch —
-        # which also lets the generator close cleanly instead of being
-        # cancelled mid-flight.
-        async for event in runner.run_async(
-            user_id=payload.user_id, 
-            session_id=payload.session_id, 
-            new_message=content
-        ):
-            if event.is_final_response() and event.content and event.content.parts:
-                text = event.content.parts[0].text
-                if text and text.strip():
-                    final_response = text
-                
-        if not final_response:
-            final_response = "Communication stream link lost. Please check environment diagnostics."
-            
+        async for update in _run_pipeline(payload):
+            if update["type"] == "final":
+                final_response = update["response"]
         return {"status": "success", "response": final_response}
-        
+
     except Exception as e:
         logger.exception("Engine failure during process execution")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/stream")
+async def chat_stream_endpoint(payload: ChatRequest):
+    """Same turn, streamed as Server-Sent Events.
+
+    The console uses this to light up the response cluster from real handoffs
+    and real tool calls, instead of animating a guess on a timer.
+    """
+
+    async def event_source():
+        try:
+            async for update in _run_pipeline(payload):
+                yield f"data: {json.dumps(update)}\n\n"
+        except asyncio.CancelledError:
+            # Operator navigated away mid-turn; nothing to report.
+            raise
+        except Exception as e:
+            logger.exception("Engine failure during streamed execution")
+            yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # don't let a proxy sit on the stream
+        },
+    )
+
 
 if __name__ == "__main__":
     import uvicorn

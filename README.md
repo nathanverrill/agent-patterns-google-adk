@@ -159,7 +159,9 @@ http://localhost:9009
 
 The console reads `/api/health` on load and shows the model and endpoint it is
 actually talking to in the telemetry strip — nothing about the provider is
-hardcoded in the UI.
+hardcoded in the UI. While a turn runs, the response cluster advances on real
+handoffs streamed from the backend (`analyst → safety → editor`) and names the
+tool in flight, rather than animating a guess on a timer.
 
 The backend API is available directly at `http://localhost:8008/api/chat`, and
 `GET http://localhost:8008/api/health` reports which model and endpoint the
@@ -226,7 +228,7 @@ can use to invoke the hosted agent.
 
 ## 🔌 API
 
-**`POST /api/chat`**
+**`POST /api/chat`** — run a turn, get the finished briefing.
 
 Request:
 
@@ -245,6 +247,27 @@ Response:
   "status": "success",
   "response": "..."
 }
+```
+
+**`POST /api/chat/stream`** — the same turn as Server-Sent Events, so a client
+can show the pipeline working. Same request body; each frame is one `data:` line:
+
+```text
+data: {"type": "agent", "agent": "disaster_analyst", "stage": "analyst"}
+data: {"type": "tool", "agent": "disaster_analyst", "tool": "geocode_and_get_weather", "args": {"address": "Joplin, MO"}}
+data: {"type": "tool_result", "agent": "disaster_analyst", "tool": "geocode_and_get_weather"}
+data: {"type": "agent", "agent": "safety_coordinator", "stage": "safety"}
+data: {"type": "agent", "agent": "refining_editor", "stage": "editor"}
+data: {"type": "final", "response": "..."}
+```
+
+Both routes share one traversal of the agent stream, so they can never disagree
+about what the pipeline did. Watch it from the terminal with:
+
+```bash
+curl -N -X POST http://localhost:8008/api/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"op","session_id":"s1","message":"Tornado warning near Joplin, MO"}'
 ```
 
 ---

@@ -354,6 +354,12 @@
       .agent.active .name {
         color: var(--amber-bright);
       }
+      .agent.done {
+        border-color: var(--edge);
+      }
+      .agent.done .dot {
+        background: var(--cyan);
+      }
       @keyframes blink {
         50% {
           opacity: 0.35;
@@ -488,11 +494,25 @@
         background: var(--amber);
         animation: blink 0.9s ease-in-out infinite;
       }
+      .pstage.done {
+        color: var(--text-dim);
+      }
+      .pstage.done .pd {
+        background: var(--text-dim);
+      }
       .psep {
         color: var(--edge);
       }
       .psep.on {
         color: var(--amber);
+      }
+      .pdetail {
+        margin-top: 8px;
+        font-family: var(--f-mono);
+        font-size: 0.68rem;
+        letter-spacing: 0.04em;
+        color: var(--text-faint);
+        min-height: 1em;
       }
 
       /* ---------- Dispatch ---------- */
@@ -852,59 +872,73 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
       }
 
       // ---- agent pipeline indicator ----
+      // Stages advance on real handoffs streamed from the backend, so what the
+      // rail shows is what the agents are actually doing.
       const stages = ["analyst", "safety", "editor"];
-      let pipelineTimer = null;
-      let activeStage = 0;
+      const stageLabels = { analyst: "ANALYST", safety: "SAFETY", editor: "EDITOR" };
+      let inFlight = false;
+      let activeStage = -1;
       let loaderEl = null;
 
       function renderPipeline() {
         return stages
           .map((s, i) => {
-            const on = i === activeStage ? "on" : "";
+            const state = i === activeStage ? "on" : i < activeStage ? "done" : "";
             const sep =
               i < stages.length - 1
                 ? `<span class="psep ${i < activeStage ? "on" : ""}">›</span>`
                 : "";
-            return `<span class="pstage ${on}"><span class="pd"></span>${s.toUpperCase()}</span>${sep}`;
+            return `<span class="pstage ${state}"><span class="pd"></span>${stageLabels[s]}</span>${sep}`;
           })
           .join("");
       }
 
       function startPipeline() {
-        activeStage = 0;
+        activeStage = -1;
+        inFlight = true;
         loaderEl = document.createElement("div");
         loaderEl.className = "msg agent";
         loaderEl.innerHTML =
           `<span class="meta">ReadyNow · processing</span>` +
-          `<div class="bubble"><div class="pipeline">${renderPipeline()}</div></div>`;
+          `<div class="bubble"><div class="pipeline">${renderPipeline()}</div>` +
+          `<div class="pdetail">routing to response cluster…</div></div>`;
         chatWindow.appendChild(loaderEl);
         chatWindow.scrollTop = chatWindow.scrollHeight;
         syncRail();
-        pipelineTimer = setInterval(() => {
-          activeStage = (activeStage + 1) % stages.length;
-          loaderEl.querySelector(".pipeline").innerHTML = renderPipeline();
-          syncRail();
-        }, 850);
+      }
+
+      function setStage(name) {
+        const i = stages.indexOf(name);
+        if (i < 0 || !loaderEl) return;
+        activeStage = i;
+        loaderEl.querySelector(".pipeline").innerHTML = renderPipeline();
+        syncRail();
+      }
+
+      function setDetail(text) {
+        if (loaderEl) loaderEl.querySelector(".pdetail").textContent = text;
       }
 
       function syncRail() {
         stages.forEach((s, i) => {
-          document
-            .getElementById("stage-" + s)
-            .classList.toggle("active", i === activeStage);
+          const el = document.getElementById("stage-" + s);
+          el.classList.toggle("active", i === activeStage);
+          el.classList.toggle("done", i < activeStage);
         });
       }
 
       function stopPipeline() {
-        clearInterval(pipelineTimer);
-        pipelineTimer = null;
+        inFlight = false;
+        activeStage = -1;
         if (loaderEl) {
           loaderEl.remove();
           loaderEl = null;
         }
-        stages.forEach((s) =>
-          document.getElementById("stage-" + s).classList.remove("active"),
-        );
+        stages.forEach((s) => {
+          const el = document.getElementById("stage-" + s);
+          el.classList.remove("active");
+          el.classList.remove("done");
+        });
       }
 
       // ---- messaging ----
@@ -935,9 +969,35 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
         inputEl.focus();
       }
 
+      // Read one Server-Sent Events stream, handing each parsed event to `onEvent`.
+      async function readEventStream(response, onEvent) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE frames are separated by a blank line; the tail may be partial.
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop();
+          for (const frame of frames) {
+            const payload = frame.replace(/^data:\s?/, "").trim();
+            if (payload) onEvent(JSON.parse(payload));
+          }
+        }
+      }
+
+      function describeTool(evt) {
+        const arg = evt.args && (evt.args.address || evt.args.origin);
+        return arg ? `${evt.tool} · ${arg}` : evt.tool;
+      }
+
       async function sendMessage() {
         const text = inputEl.value.trim();
-        if (!text || pipelineTimer) return;
+        if (!text || inFlight) return;
 
         appendMsg(text, "user", "Operator");
         inputEl.value = "";
@@ -945,28 +1005,56 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
         startPipeline();
 
         const t0 = performance.now();
-        try {
-          const response = await fetch(API_ROOT + "/api/chat", {
+        const body = JSON.stringify({
+          user_id: "local-operator-nathan",
+          session_id: sessionId,
+          message: text,
+        });
+        const post = (path) =>
+          fetch(API_ROOT + path, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              user_id: "local-operator-nathan",
-              session_id: sessionId,
-              message: text,
-            }),
+            body,
           });
 
-          const data = await response.json();
+        try {
+          let answer = null;
+          let streamError = null;
+
+          // Preferred path: watch the pipeline work in real time.
+          let response = await post("/api/chat/stream");
+
+          if (response.ok && response.body) {
+            await readEventStream(response, (evt) => {
+              if (evt.type === "agent") {
+                if (evt.stage) setStage(evt.stage);
+                else setDetail("routing to response cluster…");
+              } else if (evt.type === "tool") {
+                setDetail("⚙ " + describeTool(evt));
+              } else if (evt.type === "tool_result") {
+                setDetail("✓ " + evt.tool);
+              } else if (evt.type === "final") {
+                answer = evt.response;
+              } else if (evt.type === "error") {
+                streamError = evt.detail;
+              }
+            });
+          } else if (response.status === 404) {
+            // Backend predates the streaming route — fall back to the plain one.
+            response = await post("/api/chat");
+            if (response.ok) answer = (await response.json()).response;
+          }
+
           const ms = Math.round(performance.now() - t0);
           stopPipeline();
 
-          if (!response.ok) {
+          if (streamError || (!answer && !response.ok)) {
             latencyEl.textContent = ms + " ms";
             linkEl.textContent = "Engine error " + response.status;
             linkEl.className = "v warn";
             appendMsg(
-              "Command engine returned status " +
-                response.status +
+              "Command engine fault" +
+                (streamError ? ": " + streamError : " (status " + response.status + ")") +
                 ". Check the backend logs (docker compose logs backend-engine) — most often the model provider rejected the call on quota or an invalid key.",
               "system",
               "ReadyNow · fault",
@@ -977,7 +1065,7 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
           latencyEl.textContent = ms + " ms";
           linkEl.textContent = "Uplink online";
           linkEl.className = "v live";
-          appendMsg(data.response, "agent", "ReadyNow");
+          appendMsg(answer, "agent", "ReadyNow");
         } catch (error) {
           stopPipeline();
           latencyEl.textContent = "— ms";
