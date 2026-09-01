@@ -18,6 +18,9 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}          # premium geocoding; else Nominatim
       - READYNOW_CONTACT=${READYNOW_CONTACT:-}      # User-Agent identity for NWS/Nominatim
       - LITELLM_NUM_RETRIES=${LITELLM_NUM_RETRIES:-3}
+      # Use LiteLLM's bundled pricing table instead of fetching it on the first
+      # call — that fetch is what made the very first request feel like a hang.
+      - LITELLM_LOCAL_MODEL_COST_MAP=True
       - ADK_SUPPRESS_GEMINI_LITELLM_WARNINGS=true
       - ADK_ENABLE_TRACING=false # limit noise in logs running locally with no otel
     # Lets LLM_BASE_URL=http://host.docker.internal:11434/v1 reach an Ollama /

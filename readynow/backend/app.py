@@ -1,6 +1,8 @@
+import asyncio
 import os
 import sys
 import logging
+from contextlib import asynccontextmanager
 from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +18,19 @@ import warnings
 warnings.filterwarnings("ignore", message=".*JSON_SCHEMA_FOR_FUNC_DECL.*")
 
 from observability import configure_logging, attach_observability
-from llm import MODEL_CONFIG, build_model
+from llm import MODEL_CONFIG, build_model, warmup
 logger = logging.getLogger("ReadyNowBackend")
 
-app = FastAPI(title="Project ReadyNow! - FEMA Emergency Assistant API")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Warm the model client in the background so /api/health goes green right
+    # away while the slow first call happens off the critical path.
+    task = asyncio.create_task(warmup())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="Project ReadyNow! - FEMA Emergency Assistant API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -227,15 +238,23 @@ async def chat_endpoint(payload: ChatRequest):
         content = types.Content(role='user', parts=[types.Part(text=payload.message)])
         final_response = ""
         
-        # Drive the workflow generator natively
+        # Drive the workflow generator natively.
+        #
+        # Every agent in the pipeline emits its own "final response" event, so
+        # breaking on the first one would return the analyst's raw findings and
+        # silently skip the safety review and the editor. Drain the stream and
+        # keep the last non-empty response — the editor's polished dispatch —
+        # which also lets the generator close cleanly instead of being
+        # cancelled mid-flight.
         async for event in runner.run_async(
             user_id=payload.user_id, 
             session_id=payload.session_id, 
             new_message=content
         ):
             if event.is_final_response() and event.content and event.content.parts:
-                final_response = event.content.parts[0].text
-                break
+                text = event.content.parts[0].text
+                if text and text.strip():
+                    final_response = text
                 
         if not final_response:
             final_response = "Communication stream link lost. Please check environment diagnostics."

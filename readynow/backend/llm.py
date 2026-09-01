@@ -155,3 +155,38 @@ except ModelConfigError as err:
 def build_model() -> LiteLlm:
     """Return a LiteLlm bound to the configured endpoint (one per agent)."""
     return LiteLlm(**MODEL_CONFIG.kwargs())
+
+
+async def warmup() -> None:
+    """Make one throwaway 1-token call so the first real request isn't slow.
+
+    LiteLLM builds its client stack lazily, on the first completion — roughly
+    15 seconds of import and setup that would otherwise land on whoever types
+    the first message and look like a hang. Doing it at startup also surfaces a
+    bad key or unreachable endpoint in the logs immediately rather than on the
+    first query. Set LLM_WARMUP=false to skip it.
+    """
+    if os.getenv("LLM_WARMUP", "true").strip().lower() in ("0", "false", "no"):
+        logger.info("model warmup skipped (LLM_WARMUP is off)")
+        return
+
+    import asyncio
+    import importlib
+    import time
+
+    # `import litellm` is heavy and fully synchronous; doing it inline would
+    # block the event loop and delay startup. Push it to a worker thread.
+    litellm = await asyncio.to_thread(importlib.import_module, "litellm")
+
+    started = time.monotonic()
+    try:
+        await litellm.acompletion(
+            messages=[{"role": "user", "content": "ok"}],
+            max_tokens=1,
+            **MODEL_CONFIG.kwargs(),
+        )
+        logger.info(f"🔥 model warm — {MODEL_CONFIG.model} answered in {time.monotonic() - started:.1f}s")
+    except Exception as err:
+        # Never block startup on this: the endpoint may be rate limited, or a
+        # local model server may still be loading. Report and carry on.
+        logger.warning(f"⚠️ model warmup failed for {MODEL_CONFIG.describe()}: {err}")

@@ -16,7 +16,7 @@ DeepSeek, vLLM, a local Ollama, or your own gateway. Set a key, run one command:
 ```bash
 export LLM_API_KEY="{YOUR KEY HERE}"
 export LLM_BASE_URL="https://api.openai.com/v1"   # any /v1 endpoint
-export LLM_MODEL="gpt-4o-mini"
+export LLM_MODEL="gpt-4.1-mini"
 
 docker compose -f readynow/docker-compose.yml up -d --build
 ```
@@ -64,16 +64,16 @@ structured `ENTER`/`EXIT`, prompt, and tool-call traces to stdout for `docker lo
 
 The interesting parts, and where they live in the code:
 
-| Capability                          | File / Component                                 | Implementation                                                                                                                               |
-| :---------------------------------- | :----------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Authoritative root persona**      | `backend/app.py` → `ReadyNow_Command_Root`       | A supervisor `Agent` with a reassuring, command-centric FEMA persona that parses context and delegates.                                      |
-| **Multi-agent team**                | `backend/app.py` → `fema_response_pipeline`      | A `SequentialAgent` chaining data retrieval → safety review → final editing as isolated sub-agents.                                          |
-| **Live weather grounding**          | `backend/app.py` → `geocode_and_get_weather`     | Calls the live National Weather Service API using point coordinates.                                                                         |
-| **Evacuation routing**              | `backend/app.py` → `calculate_evacuation_routes` | Produces actionable primary/secondary routes and safety directives.                                                                          |
-| **Resilient geocoding**             | `backend/app.py` → `geocode_and_get_weather`     | Uses **Google Maps Geocoding** when `GOOGLE_API_KEY` is set, falling back to **Nominatim (OpenStreetMap)** so the tool never hard-fails.     |
-| **Input guardrails**                | `backend/app.py` → `custom_before_callback`      | Intercepts payloads before generation; blocks non-US locations (NWS constraint) and off-mission requests (poems, string ops, recipes, etc.). |
-| **Full-lifecycle observability**    | `backend/observability.py`                       | Recursively attaches tracing callbacks to the entire agent tree (agent / model / tool hooks) and logs to stdout.                             |
-| **Portable model layer**            | `backend/llm.py`                                 | Resolves env vars into a LiteLLM config so every agent runs against Gemini, OpenAI, or any OpenAI-compatible endpoint — and fails at startup, with a readable banner, if the config is incomplete. |
+| Capability                       | File / Component                                 | Implementation                                                                                                                                                                                     |
+| :------------------------------- | :----------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Authoritative root persona**   | `backend/app.py` → `ReadyNow_Command_Root`       | A supervisor `Agent` with a reassuring, command-centric FEMA persona that parses context and delegates.                                                                                            |
+| **Multi-agent team**             | `backend/app.py` → `fema_response_pipeline`      | A `SequentialAgent` chaining data retrieval → safety review → final editing as isolated sub-agents.                                                                                                |
+| **Live weather grounding**       | `backend/app.py` → `geocode_and_get_weather`     | Calls the live National Weather Service API using point coordinates.                                                                                                                               |
+| **Evacuation routing**           | `backend/app.py` → `calculate_evacuation_routes` | Produces actionable primary/secondary routes and safety directives.                                                                                                                                |
+| **Resilient geocoding**          | `backend/app.py` → `geocode_and_get_weather`     | Uses **Google Maps Geocoding** when `GOOGLE_API_KEY` is set, falling back to **Nominatim (OpenStreetMap)** so the tool never hard-fails.                                                           |
+| **Input guardrails**             | `backend/app.py` → `custom_before_callback`      | Intercepts payloads before generation; blocks non-US locations (NWS constraint) and off-mission requests (poems, string ops, recipes, etc.).                                                       |
+| **Full-lifecycle observability** | `backend/observability.py`                       | Recursively attaches tracing callbacks to the entire agent tree (agent / model / tool hooks) and logs to stdout.                                                                                   |
+| **Portable model layer**         | `backend/llm.py`                                 | Resolves env vars into a LiteLLM config so every agent runs against Gemini, OpenAI, or any OpenAI-compatible endpoint — and fails at startup, with a readable banner, if the config is incomplete. |
 
 ---
 
@@ -100,14 +100,14 @@ export LLM_BASE_URL="https://api.openai.com/v1"
 export LLM_MODEL="gpt-4o-mini"
 ```
 
-| Provider   | `LLM_BASE_URL`                      | Example `LLM_MODEL`         |
-| :--------- | :---------------------------------- | :-------------------------- |
-| OpenAI     | `https://api.openai.com/v1`         | `gpt-4o-mini`               |
-| Groq       | `https://api.groq.com/openai/v1`    | `llama-3.3-70b-versatile`   |
-| Together   | `https://api.together.xyz/v1`       | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
-| OpenRouter | `https://openrouter.ai/api/v1`      | `anthropic/claude-sonnet-5` |
-| DeepSeek   | `https://api.deepseek.com/v1`       | `deepseek-chat`             |
-| Ollama / LM Studio / vLLM | `http://host.docker.internal:11434/v1` | `llama3.1:8b`  |
+| Provider                  | `LLM_BASE_URL`                         | Example `LLM_MODEL`                       |
+| :------------------------ | :------------------------------------- | :---------------------------------------- |
+| OpenAI                    | `https://api.openai.com/v1`            | `gpt-4o-mini`                             |
+| Groq                      | `https://api.groq.com/openai/v1`       | `llama-3.3-70b-versatile`                 |
+| Together                  | `https://api.together.xyz/v1`          | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| OpenRouter                | `https://openrouter.ai/api/v1`         | `anthropic/claude-sonnet-5`               |
+| DeepSeek                  | `https://api.deepseek.com/v1`          | `deepseek-chat`                           |
+| Ollama / LM Studio / vLLM | `http://host.docker.internal:11434/v1` | `llama3.1:8b`                             |
 
 Local servers that ignore auth need no key — leave `LLM_API_KEY` unset.
 Whatever you choose, **the model must support tool calling**: ReadyNow! delegates
@@ -156,6 +156,10 @@ Navigate to:
 ```text
 http://localhost:9009
 ```
+
+The console reads `/api/health` on load and shows the model and endpoint it is
+actually talking to in the telemetry strip — nothing about the provider is
+hardcoded in the UI.
 
 The backend API is available directly at `http://localhost:8008/api/chat`, and
 `GET http://localhost:8008/api/health` reports which model and endpoint the
@@ -294,13 +298,13 @@ ReadyNow! pulls together patterns I worked through individually first. Each
 notebook in [`notebooks/`](./notebooks/) is a self-contained, runnable example of
 one ADK building block:
 
-| Notebook                                           | Pattern                                                            |
-| :------------------------------------------------- | :----------------------------------------------------------------- |
-| [`challenge1.ipynb`](./notebooks/challenge1.ipynb) | Custom tool functions — grounding an agent in a live weather API    |
+| Notebook                                           | Pattern                                                              |
+| :------------------------------------------------- | :------------------------------------------------------------------- |
+| [`challenge1.ipynb`](./notebooks/challenge1.ipynb) | Custom tool functions — grounding an agent in a live weather API     |
 | [`challenge2.ipynb`](./notebooks/challenge2.ipynb) | Lifecycle callbacks — pre/post-model hooks for filtering and logging |
-| [`challenge3.ipynb`](./notebooks/challenge3.ipynb) | Multi-agent hierarchies — a root agent delegating to specialists    |
-| [`challenge4.ipynb`](./notebooks/challenge4.ipynb) | `SequentialAgent` workflows — answer → critique → refine pipelines  |
-| [`challenge5.ipynb`](./notebooks/challenge5.ipynb) | Deployment — staging buckets and Vertex AI Agent Engine             |
+| [`challenge3.ipynb`](./notebooks/challenge3.ipynb) | Multi-agent hierarchies — a root agent delegating to specialists     |
+| [`challenge4.ipynb`](./notebooks/challenge4.ipynb) | `SequentialAgent` workflows — answer → critique → refine pipelines   |
+| [`challenge5.ipynb`](./notebooks/challenge5.ipynb) | Deployment — staging buckets and Vertex AI Agent Engine              |
 
 ---
 
@@ -308,15 +312,15 @@ one ADK building block:
 
 Environment variables (set via shell or `docker-compose.yml`):
 
-| Variable              | Required | Default                     | Purpose                                                     |
-| :-------------------- | :------- | :-------------------------- | :---------------------------------------------------------- |
-| `LLM_API_KEY`         | ◑        | —                           | Key for the OpenAI-compatible endpoint (`OPENAI_API_KEY` also accepted) |
-| `LLM_BASE_URL`        | ❌       | provider default            | OpenAI-compatible endpoint, e.g. `https://api.groq.com/openai/v1` |
-| `LLM_MODEL`           | ❌       | `gemini/gemini-2.5-flash` / `gpt-4o-mini` | Model id; a provider prefix is honored as-is  |
-| `GEMINI_API_KEY`      | ◑        | —                           | Auth for Gemini via LiteLlm (the no-`LLM_*` default path)   |
-| `GOOGLE_API_KEY`      | ❌       | —                           | Enables Google Maps geocoding (else Nominatim fallback)     |
-| `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com` | Contact identity in the NWS/Nominatim User-Agent header     |
-| `LITELLM_NUM_RETRIES` | ❌       | `3`                         | LiteLlm retry count                                         |
+| Variable              | Required | Default                                   | Purpose                                                                 |
+| :-------------------- | :------- | :---------------------------------------- | :---------------------------------------------------------------------- |
+| `LLM_API_KEY`         | ◑        | —                                         | Key for the OpenAI-compatible endpoint (`OPENAI_API_KEY` also accepted) |
+| `LLM_BASE_URL`        | ❌       | provider default                          | OpenAI-compatible endpoint, e.g. `https://api.groq.com/openai/v1`       |
+| `LLM_MODEL`           | ❌       | `gemini/gemini-2.5-flash` / `gpt-4o-mini` | Model id; a provider prefix is honored as-is                            |
+| `GEMINI_API_KEY`      | ◑        | —                                         | Auth for Gemini via LiteLlm (the no-`LLM_*` default path)               |
+| `GOOGLE_API_KEY`      | ❌       | —                                         | Enables Google Maps geocoding (else Nominatim fallback)                 |
+| `READYNOW_CONTACT`    | ❌       | `readynow-demo@example.com`               | Contact identity in the NWS/Nominatim User-Agent header                 |
+| `LITELLM_NUM_RETRIES` | ❌       | `3`                                       | LiteLlm retry count                                                     |
 
 ◑ = one of `LLM_API_KEY` or `GEMINI_API_KEY` is required (local endpoints that
 ignore auth need neither). `AGENT_MODEL_NAME` still works as an alias for
@@ -334,6 +338,9 @@ ignore auth need neither). `AGENT_MODEL_NAME` still works as an alias for
   daily limits; wait for the reset or swap in a new key.
 - **Agent replies but never calls a tool** — the model you pointed at probably
   doesn't support tool calling. Pick one that does.
+- **First query much slower than later ones** — the startup warm-up hadn't
+  finished yet (`🔥 model warm` in the logs marks the point where it has).
+  A full four-agent turn settles around 8–12s on `gpt-4.1-mini`.
 - **Local model unreachable from Docker** — use `host.docker.internal`, not
   `localhost`, in `LLM_BASE_URL`; `localhost` resolves to the container itself.
 - **`Link interrupt` in the UI** — confirm the backend container is running and

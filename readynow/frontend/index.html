@@ -717,6 +717,10 @@
         <span class="v" id="t-latency">— ms</span>
       </div>
       <div class="tcell">
+        <span class="k">Endpoint</span>
+        <span class="v" id="t-endpoint">—</span>
+      </div>
+      <div class="tcell">
         <span class="k">Response cluster</span>
         <span class="v live" id="t-agents">3 / 3 online</span>
       </div>
@@ -751,7 +755,7 @@
         </div>
         <div class="rail-foot">
           ROUTING · <b>sequential</b><br />
-          MODEL · gemini-2.5-flash<br />
+          MODEL · <span id="t-model">detecting…</span><br />
           CMD · ReadyNow_Command_Root
         </div>
       </aside>
@@ -800,7 +804,34 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
       const sendBtn = document.getElementById("send-btn");
       const inputEl = document.getElementById("user-input");
 
+      const API_ROOT = "http://localhost:8008";
+
       document.getElementById("t-session").textContent = sessionId;
+      document.getElementById("t-uplink").textContent = API_ROOT.replace(/^https?:\/\//, "");
+
+      // ---- report the model the backend actually resolved ----
+      // The engine runs on Gemini, OpenAI, or any OpenAI-compatible endpoint,
+      // so nothing about the model is hardcoded here — we ask it.
+      async function loadEngineInfo() {
+        const modelEl = document.getElementById("t-model");
+        const endpointEl = document.getElementById("t-endpoint");
+        try {
+          const res = await fetch(API_ROOT + "/api/health");
+          const info = await res.json();
+          modelEl.textContent = info.model;
+          modelEl.title = `${info.provider} · ${info.endpoint}`;
+          endpointEl.textContent = info.endpoint.replace(/^https?:\/\//, "");
+          endpointEl.title = info.endpoint;
+          linkEl.textContent = "Uplink online";
+          linkEl.className = "v live";
+        } catch (err) {
+          modelEl.textContent = "engine offline";
+          endpointEl.textContent = "unreachable";
+          linkEl.textContent = "Link interrupt";
+          linkEl.className = "v warn";
+        }
+      }
+      loadEngineInfo();
 
       // ---- live UTC clock ----
       function tickClock() {
@@ -915,7 +946,7 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
 
         const t0 = performance.now();
         try {
-          const response = await fetch("http://localhost:8008/api/chat", {
+          const response = await fetch(API_ROOT + "/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -936,7 +967,7 @@ If anyone is in immediate danger, call 911 first — then come back here for gui
             appendMsg(
               "Command engine returned status " +
                 response.status +
-                ". The agents likely hit the Gemini daily quota — wait for the reset or swap the API key, then retry.",
+                ". Check the backend logs (docker compose logs backend-engine) — most often the model provider rejected the call on quota or an invalid key.",
               "system",
               "ReadyNow · fault",
             );
