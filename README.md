@@ -10,6 +10,14 @@ Nathan Verrill, June 2026
 
 ---
 
+Grab a key from https://aistudio.google.com/app/apikey
+
+`export GEMINI_API_KEY=""` 
+
+`docker compose -f readynow/docker-compose.yml up -d --build`
+
+---
+
 ## 📚 Workshop Challenges
 
 This capstone is the final stage of a five-part series. The earlier challenges are Jupyter notebooks in the [`notebooks/`](../notebooks/) folder:
