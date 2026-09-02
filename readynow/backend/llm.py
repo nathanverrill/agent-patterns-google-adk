@@ -1,5 +1,5 @@
 """
-llm.py — provider-agnostic model wiring for ReadyNow!
+llm.py — provider-agnostic model wiring for ReadyNow
 
 Every agent in the app talks to whatever endpoint you point it at: Gemini,
 OpenAI, or *any* OpenAI-compatible server (Ollama, LM Studio, vLLM, llama.cpp,
@@ -146,7 +146,7 @@ except ModelConfigError as err:
     import sys
 
     print("\n" + "=" * 72, file=sys.stderr)
-    print("❌ ReadyNow! cannot start — model configuration incomplete.", file=sys.stderr)
+    print("❌ ReadyNow cannot start — model configuration incomplete.", file=sys.stderr)
     print(f"   {err}", file=sys.stderr)
     print("=" * 72 + "\n", file=sys.stderr)
     raise SystemExit(1)

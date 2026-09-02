@@ -1,11 +1,12 @@
-# ⚡ Project ReadyNow! — FEMA Emergency AI Assistant
+# ⚡ ReadyNow — multi-agent emergency response on Google ADK
 
 Nathan Verrill, June 2026
 
-### _A weekend demo: production-shaped multi-agent patterns on the Google Agent Development Kit_
+### _A weekend demo: live NWS weather, OpenStreetMap routing, and a streaming agent console — running on any OpenAI-compatible model_
 
 [![ADK Framework](https://img.shields.io/badge/Framework-Google%20ADK-blue)](https://google.github.io/adk-docs/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-brightgreen)](https://www.python.org/)
+[![OpenStreetMap](https://img.shields.io/badge/Routing-OSRM%20%2F%20OpenStreetMap-7ebc6f)](https://project-osrm.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -32,9 +33,9 @@ Describe a situation in the form entry box on the bottom of the screen
 
 ## 📌 Overview
 
-![Project ReadyNow Overview](./images/ui_and_logs.png)
+![The ReadyNow console and its backend trace side by side](./images/ui_and_logs.png)
 
-**Project ReadyNow!** is an emergency-response assistant built around a **Federal Emergency Management Agency (FEMA)** style use case. Powered by the **Google Agent Development Kit (ADK)** and served through a **FastAPI** backend, it ships in **Docker** for reproducible local runs and deploys to **Vertex AI Agent Engine** for managed, hosted operation.
+**ReadyNow** is an emergency-response assistant built around a hypothetical **Federal Emergency Management Agency (FEMA)** use case. Powered by the **Google Agent Development Kit (ADK)** and served through a **FastAPI** backend, it ships in **Docker** for reproducible local runs and deploys to **Vertex AI Agent Engine** for managed, hosted operation.
 
 The system acts as an authoritative, empathetic, rapid-response assistant during natural disasters. Given a user's location and situation, it:
 
@@ -60,7 +61,7 @@ The model layer is deliberately not tied to one vendor: the same container runs 
 
 ## 🏗️ Architecture
 
-![Project ReadyNow architecture diagram](./images/architecture.png)
+![ReadyNow architecture diagram](./images/architecture.png)
 
 Every agent and tool in the tree is instrumented by `observability.py`, which emits
 structured `ENTER`/`EXIT`, prompt, and tool-call traces to stdout for `docker logs`.
@@ -119,7 +120,7 @@ export LLM_MODEL="gpt-4.1-mini"
 | Ollama / LM Studio / vLLM | `http://host.docker.internal:11434/v1` | `llama3.1:8b`                             |
 
 Local servers that ignore auth need no key — leave `LLM_API_KEY` unset.
-Whatever you choose, **the model must support tool calling**: ReadyNow! delegates
+Whatever you choose, **the model must support tool calling**: ReadyNow delegates
 through tools, so a text-only model will not complete the pipeline.
 
 **Or Gemini, the original path:**
@@ -324,7 +325,7 @@ A longer captured trace is available in [`example_agentlog.txt`](./readynow/exam
 agent-patterns-google-adk/
 ├── notebooks/               # Standalone ADK pattern explorations (see below)
 ├── images/                  # Architecture and UI screenshots
-└── readynow/                # The ReadyNow! application
+└── readynow/                # The ReadyNow application
     ├── Dockerfile.backend   # Python 3.12 image for the FastAPI + ADK backend
     ├── docker-compose.yml   # Backend + Nginx frontend service definitions
     ├── .env.example         # Model configuration template
@@ -344,7 +345,7 @@ agent-patterns-google-adk/
 
 ## 📚 Pattern Notebooks
 
-ReadyNow! pulls together patterns I worked through individually first. Each
+ReadyNow pulls together patterns I worked through individually first. Each
 notebook in [`notebooks/`](./notebooks/) is a self-contained, runnable example of
 one ADK building block:
 
@@ -408,5 +409,5 @@ ignore auth need neither). `AGENT_MODEL_NAME` still works as an alias for
 
 ## 📄 License
 
-MIT. ReadyNow! is a demo project and is not affiliated with or endorsed by FEMA;
+MIT. ReadyNow is a demo project and is not affiliated with or endorsed by FEMA;
 do not rely on it for actual emergency decisions.

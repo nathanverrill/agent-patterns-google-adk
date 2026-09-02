@@ -34,7 +34,7 @@ async def lifespan(_: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="Project ReadyNow! - FEMA Emergency Assistant API", lifespan=lifespan)
+app = FastAPI(title="ReadyNow — FEMA Emergency Assistant API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,14 +64,14 @@ def custom_before_callback(callback_context: Any, llm_request: Any) -> None:
             
             non_us_indicators = ["LONDON", "PARIS", "TOKYO", "BERLIN", "FRANCE", "UK", "EUROPE"]
             if any(indicator in user_text_upper for indicator in non_us_indicators):
-                refusal = "🚨 ReadyNow! Boundary Policy: I am only authorized to coordinate disaster monitoring and response maneuvers within United States territories."
+                refusal = "🚨 ReadyNow Boundary Policy: I am only authorized to coordinate disaster monitoring and response maneuvers within United States territories."
                 if isinstance(part, dict): part["text"] = f"Output exactly this text: {refusal}"
                 else: setattr(part, "text", f"Output exactly this text: {refusal}")
                 return
 
             off_mission_keywords = ["WRITE A POEM", "REVERSE A STRING", "DROP TABLE", "PLAY A GAME", "RECIPE"]
             if any(keyword in user_text_upper for keyword in off_mission_keywords):
-                refusal = "⚠️ ReadyNow! Safety Directive: As a FEMA emergency response resource, I must remain fully dedicated to active disaster management, survival logistics, and routing operations. I cannot assist with non-emergency tasks."
+                refusal = "⚠️ ReadyNow Safety Directive: As a FEMA emergency response resource, I must remain fully dedicated to active disaster management, survival logistics, and routing operations. I cannot assist with non-emergency tasks."
                 if isinstance(part, dict): part["text"] = f"Output exactly this text: {refusal}"
                 else: setattr(part, "text", f"Output exactly this text: {refusal}")
                 return
@@ -351,7 +351,7 @@ answer_team = SequentialAgent(
 root_agent = Agent(
     name="ReadyNow_Command_Root",
     model=build_model(),
-    instruction="""You are the commanding voice of Project ReadyNow!, a high-performance FEMA Emergency AI Assistant.
+    instruction="""You are the commanding voice of Project ReadyNow, a high-performance FEMA Emergency AI Assistant.
     Your demeanor is authoritative, highly reassuring, deeply empathetic, and clear under pressure. 
     You never engage in frivolous tasks. When users present emergency scenarios, pass them to your 'fema_response_pipeline' 
     sub-agents to compile factual data, then present the resolution as a unified commanding command interface output.""",
