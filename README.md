@@ -1,4 +1,4 @@
-# ⚡ ReadyNow — multi-agent emergency response on Google ADK
+# ReadyNow Demo — multi-agent emergency response on Google ADK
 
 Nathan Verrill, June 2026
 
