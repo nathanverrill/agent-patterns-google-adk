@@ -322,7 +322,7 @@ A longer captured trace is available in [`example_agentlog.txt`](./readynow/exam
 ## 📁 Repository Layout
 
 ```text
-agent-patterns-google-adk/
+readynow-adk/
 ├── notebooks/               # Standalone ADK pattern explorations (see below)
 ├── images/                  # Architecture and UI screenshots
 └── readynow/                # The ReadyNow application
